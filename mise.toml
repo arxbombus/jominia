@@ -1,0 +1,65 @@
+[tools]
+go = "1.26.6"
+golangci-lint = "2.12.2"
+lefthook = "2.1.11"
+cocogitto = "7.0.0"
+
+[tasks.setup]
+description = "Set up the project"
+depends = ["deps"]
+run = "lefthook install"
+
+[tasks.deps]
+description = "Download and verify Go dependencies"
+run = ["go mod download", "go mod verify"]
+
+[tasks.tidy]
+description = "Synchronize go.mod and go.sum"
+run = "go mod tidy"
+
+[tasks.fix]
+description = "Apply Go source fixes"
+run = "go fix ./..."
+
+[tasks."fix-diff"]
+description = "Preview changes from go fix"
+run = "go fix -diff ./..."
+
+[tasks.format]
+description = "Format Go source"
+run = "golangci-lint fmt"
+
+[tasks.lint]
+description = "Lint Go source"
+run = "golangci-lint run"
+
+[tasks.test]
+description = "Run tests"
+run = "go test ./..."
+
+[tasks."test-race"]
+description = "Run tests with the race detector"
+run = "go test -race ./..."
+
+[tasks.coverage]
+description = "Run tests and generate coverage"
+run = [
+    "go test -covermode=atomic -coverprofile=coverage.txt ./...",
+    "go tool cover -func=coverage.txt",
+]
+
+[tasks.vuln]
+description = "Check for known vulnerabilities"
+run = "go tool govulncheck ./..."
+
+[tasks."check-commits"]
+description = "Check commit history for Conventional Commits"
+run = "cog check"
+
+[tasks.check]
+description = "Run the local quality gate"
+depends = ["lint", "test-race"]
+
+[tasks."check-all"]
+description = "Run all checks including vulnerability scanning"
+depends = ["check", "vuln"]

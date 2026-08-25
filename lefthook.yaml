@@ -1,0 +1,24 @@
+glob_matcher: doublestar
+
+pre-commit:
+  commands:
+    format:
+      priority: 1
+      glob: "**/*.go"
+      run: mise exec -- golangci-lint fmt {staged_files}
+      stage_fixed: true
+
+    lint:
+      priority: 2
+      glob: "**/*.go"
+      run: mise run lint
+
+commit-msg:
+  commands:
+    cog:
+      run: mise exec -- cog verify --file "{1}"
+
+pre-push:
+  commands:
+    check:
+      run: mise run check
