@@ -33,7 +33,7 @@ const (
 	Semicolon
 	// Syntax nodes.
 	Root
-	Property
+	Entry
 	Block
 	// Error-recovery nodes.
 	Bogus
@@ -102,11 +102,11 @@ func (k SyntaxKind) String() string {
 	case QuestionEquals:
 		return "QuestionEquals"
 	case Semicolon:
-		return "SemiColon"
+		return "Semicolon"
 	case Root:
 		return "Root"
-	case Property:
-		return "Property"
+	case Entry:
+		return "Entry"
 	case Block:
 		return "Block"
 	case Bogus:
