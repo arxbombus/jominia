@@ -19,7 +19,6 @@ type Event struct {
 	End  text.TextSize
 }
 
-//nolint:unused // for the future :)
 func tombstoneEvent() Event {
 	return Event{
 		Type: EventStart,

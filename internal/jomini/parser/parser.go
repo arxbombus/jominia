@@ -21,6 +21,14 @@ func (p *Parser) At(kind syntax.SyntaxKind) bool {
 	return p.Current() == kind
 }
 
+func (p *Parser) Start() Marker {
+	position := len(p.events)
+	p.events = append(p.events, tombstoneEvent())
+	return Marker{
+		position: position,
+	}
+}
+
 func (p *Parser) Bump() {
 	kind := p.Current()
 	if kind == syntax.EOF {
