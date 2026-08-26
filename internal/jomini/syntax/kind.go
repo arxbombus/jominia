@@ -19,6 +19,8 @@ const (
 	// Punctuation and operators.
 	LCurly
 	RCurly
+	LBracket
+	RBracket
 	Equals
 	EqualsEquals
 	BangEquals
@@ -28,6 +30,7 @@ const (
 	GreaterEquals
 	Question
 	QuestionEquals
+	Semicolon
 	// Syntax nodes.
 	Root
 	Property
@@ -76,6 +79,10 @@ func (k SyntaxKind) String() string {
 		return "LCurly"
 	case RCurly:
 		return "RCurly"
+	case LBracket:
+		return "LBracket"
+	case RBracket:
+		return "RBracket"
 	case Equals:
 		return "Equals"
 	case EqualsEquals:
@@ -94,6 +101,8 @@ func (k SyntaxKind) String() string {
 		return "Question"
 	case QuestionEquals:
 		return "QuestionEquals"
+	case Semicolon:
+		return "SemiColon"
 	case Root:
 		return "Root"
 	case Property:

@@ -43,6 +43,12 @@ func (l *Lexer) Next() Token {
 	case '}':
 		l.position++
 		return l.token(syntax.RCurly, start)
+	case '[':
+		l.position++
+		return l.token(syntax.LBracket, start)
+	case ']':
+		l.position++
+		return l.token(syntax.RBracket, start)
 	case '=':
 		l.position++
 		if l.eat('=') {
@@ -73,6 +79,9 @@ func (l *Lexer) Next() Token {
 			return l.token(syntax.QuestionEquals, start)
 		}
 		return l.token(syntax.Question, start)
+	case ';':
+		l.position++
+		return l.token(syntax.Semicolon, start)
 	case '"':
 		kind := l.scanString()
 		return l.token(kind, start)
@@ -196,10 +205,12 @@ func isAtomBoundary(char byte) bool {
 		'\n', '\r',
 		'#',
 		'{', '}',
+		'[', ']',
 		'=',
 		'!',
 		'<', '>',
 		'?',
+		';',
 		'"':
 		return true
 	default:

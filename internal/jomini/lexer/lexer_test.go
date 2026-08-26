@@ -171,6 +171,53 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
+			name:   "semicolon",
+			source: `foo=bar;`,
+			want: []expectedToken{
+				{syntax.Identifier, "foo"},
+				{syntax.Equals, "="},
+				{syntax.Identifier, "bar"},
+				{syntax.Semicolon, ";"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "brackets",
+			source: `@[1-leo_x]`,
+			want: []expectedToken{
+				{syntax.Identifier, "@"},
+				{syntax.LBracket, "["},
+				{syntax.Identifier, "1-leo_x"},
+				{syntax.RBracket, "]"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "brackets adjacent to identifier",
+			source: `foo[bar]`,
+			want: []expectedToken{
+				{syntax.Identifier, "foo"},
+				{syntax.LBracket, "["},
+				{syntax.Identifier, "bar"},
+				{syntax.RBracket, "]"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "hyphens and variables remain atoms",
+			source: `-42 dashed-identifier @my_var $VALUE$`,
+			want: []expectedToken{
+				{syntax.Number, "-42"},
+				{syntax.Whitespace, " "},
+				{syntax.Identifier, "dashed-identifier"},
+				{syntax.Whitespace, " "},
+				{syntax.Identifier, "@my_var"},
+				{syntax.Whitespace, " "},
+				{syntax.Identifier, "$VALUE$"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
 			name: "vic 3 state",
 			source: `STATE_LOMBARDY = {
     id = 76
