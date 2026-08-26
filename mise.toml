@@ -35,11 +35,44 @@ run = "golangci-lint run"
 
 [tasks.test]
 description = "Run tests"
-run = "go test ./..."
+usage = '''
+arg "[target]" help="Package, directory, or test file" default="./..."
+flag "-r --run <pattern>" help="Run tests matching a name regex"
+'''
+run = '''
+target="${usage_target?}"
+
+# If a specific _test.go file was provided, test its package.
+if [[ "$target" == *_test.go ]]; then
+    target="$(dirname "$target")"
+fi
+
+if [[ -n "${usage_run:-}" ]]; then
+    go test "$target" -run "$usage_run"
+else
+    go test "$target"
+fi
+'''
 
 [tasks."test-race"]
 description = "Run tests with the race detector"
-run = "go test -race ./..."
+usage = '''
+arg "[target]" help="Package, directory, or test file" default="./..."
+flag "-r --run <pattern>" help="Run tests matching a name regex"
+'''
+run = '''
+target="${usage_target?}"
+
+if [[ "$target" == *_test.go ]]; then
+    target="$(dirname "$target")"
+fi
+
+if [[ -n "${usage_run:-}" ]]; then
+    go test -race "$target" -run "$usage_run"
+else
+    go test -race "$target"
+fi
+'''
 
 [tasks.coverage]
 description = "Run tests and generate coverage"
