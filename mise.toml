@@ -41,16 +41,36 @@ flag "-r --run <pattern>" help="Run tests matching a name regex"
 '''
 run = '''
 target="${usage_target?}"
+pattern="${usage_run:-}"
 
-# If a specific _test.go file was provided, test its package.
 if [[ "$target" == *_test.go ]]; then
-    target="$(dirname "$target")"
-fi
+    file="$target"
+    package="./$(dirname "$file")"
 
-if [[ -n "${usage_run:-}" ]]; then
-    go test "$target" -run "$usage_run"
+    if [[ -z "$pattern" ]]; then
+        pattern="$(
+            sed -nE 's/^func (Test[[:alnum:]_]+)\(.*$/\1/p' "$file" |
+            paste -sd '|' -
+        )"
+
+        pattern="^(${pattern})$"
+    fi
+
+    go test "$package" -run "$pattern"
 else
-    go test "$target"
+    case "$target" in
+        ./*|../*|/*)
+            ;;
+        *)
+            target="./$target"
+            ;;
+    esac
+
+    if [[ -n "$pattern" ]]; then
+        go test "$target" -run "$pattern"
+    else
+        go test "$target"
+    fi
 fi
 '''
 
@@ -62,15 +82,36 @@ flag "-r --run <pattern>" help="Run tests matching a name regex"
 '''
 run = '''
 target="${usage_target?}"
+pattern="${usage_run:-}"
 
 if [[ "$target" == *_test.go ]]; then
-    target="$(dirname "$target")"
-fi
+    file="$target"
+    package="./$(dirname "$file")"
 
-if [[ -n "${usage_run:-}" ]]; then
-    go test -race "$target" -run "$usage_run"
+    if [[ -z "$pattern" ]]; then
+        pattern="$(
+            sed -nE 's/^func (Test[[:alnum:]_]+)\(.*$/\1/p' "$file" |
+            paste -sd '|' -
+        )"
+
+        pattern="^(${pattern})$"
+    fi
+
+    go test -race "$package" -run "$pattern"
 else
-    go test -race "$target"
+    case "$target" in
+        ./*|../*|/*)
+            ;;
+        *)
+            target="./$target"
+            ;;
+    esac
+
+    if [[ -n "$pattern" ]]; then
+        go test -race "$target" -run "$pattern"
+    else
+        go test -race "$target"
+    fi
 fi
 '''
 
