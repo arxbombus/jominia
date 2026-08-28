@@ -6,16 +6,14 @@ import (
 	"github.com/arxbombus/jominia/internal/text"
 )
 
-/*
- * In the future we can add stuff like `Nth()`, `Peek()`, `Checkpoint()`, `Rewind()`, `SkipAsTrivia()` etc.
- */
-
+// Trivia records trivia skipped between parser tokens.
 type Trivia struct {
 	Kind       syntax.SyntaxKind
 	Range      text.TextRange
 	IsTrailing bool
 }
 
+// TokenSource exposes non-trivia lexer tokens to the parser while retaining trivia.
 type TokenSource struct {
 	source string
 	lexer  *lexer.Lexer
@@ -25,6 +23,7 @@ type TokenSource struct {
 	hasPrecedingLineBreak bool
 }
 
+// NewTokenSource returns a TokenSource positioned at the first non-trivia token.
 func NewTokenSource(source string) *TokenSource {
 	ts := &TokenSource{
 		source: source,
@@ -34,22 +33,50 @@ func NewTokenSource(source string) *TokenSource {
 	return ts
 }
 
+// Current returns the kind of the current non-trivia token.
 func (ts *TokenSource) Current() syntax.SyntaxKind {
 	return ts.current.Kind
 }
 
+// CurrentRange returns the source range of the current non-trivia token.
 func (ts *TokenSource) CurrentRange() text.TextRange {
 	return ts.current.Range
 }
 
+// Text returns the original source text.
 func (ts *TokenSource) Text() string {
 	return ts.source
 }
 
+// Nth returns the kind of the nth non-trivia token without consuming it.
+// Nth(0) is equivalent to Current.
+func (ts *TokenSource) Nth(n int) syntax.SyntaxKind {
+	if n < 0 {
+		panic("token source: lookahead index must be non-negative")
+	}
+	if n == 0 {
+		return ts.current.Kind
+	}
+	lexer := *ts.lexer
+	nonTriviaIndex := 0
+	for {
+		token := lexer.Next()
+		if token.Kind.IsTrivia() {
+			continue
+		}
+		nonTriviaIndex++
+		if nonTriviaIndex == n || token.Kind == syntax.EOF {
+			return token.Kind
+		}
+	}
+}
+
+// HasPrecedingLineBreak reports whether the current token is preceded by a newline.
 func (ts *TokenSource) HasPrecedingLineBreak() bool {
 	return ts.hasPrecedingLineBreak
 }
 
+// Bump advances to the next non-trivia token.
 func (ts *TokenSource) Bump() {
 	if ts.current.Kind == syntax.EOF {
 		return
@@ -57,11 +84,15 @@ func (ts *TokenSource) Bump() {
 	ts.nextNonTriviaToken(false)
 }
 
-// Should return trivia AND lexer diagnostics in the future
+// Finish returns the trivia collected while advancing the token source.
+//
+// Lexer diagnostics may also be returned here in the future.
 func (ts *TokenSource) Finish() []Trivia {
 	return ts.trivia
 }
 
+// nextNonTriviaToken advances until it finds a non-trivia token and records any
+// trivia skipped along the way.
 func (ts *TokenSource) nextNonTriviaToken(isFirstToken bool) {
 	isTrailing := !isFirstToken
 	ts.hasPrecedingLineBreak = false

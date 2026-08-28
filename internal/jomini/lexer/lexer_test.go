@@ -82,7 +82,7 @@ func TestLex(t *testing.T) {
 				{syntax.Whitespace, " "},
 				{syntax.QuestionEquals, "?="},
 				{syntax.Whitespace, " "},
-				{syntax.ErrorToken, "!"},
+				{syntax.Bang, "!"},
 				{syntax.EOF, ""},
 			},
 		},
@@ -105,7 +105,7 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
-			name:   "string",
+			name:   "double quoted string",
 			source: `"hello world"`,
 			want: []expectedToken{
 				{syntax.String, `"hello world"`},
@@ -113,7 +113,7 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
-			name:   "escaped quote in string",
+			name:   "escaped quote in double quoted string",
 			source: `"hello \"world\""`,
 			want: []expectedToken{
 				{syntax.String, `"hello \"world\""`},
@@ -121,10 +121,34 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
-			name:   "unterminated string",
+			name:   "unterminated double quoted string",
 			source: `"hello`,
 			want: []expectedToken{
 				{syntax.ErrorToken, `"hello`},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "single quoted token",
+			source: `'NO_WORLD_MARKET_ACCESS'`,
+			want: []expectedToken{
+				{syntax.SingleQuotedString, `'NO_WORLD_MARKET_ACCESS'`},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "escaped quote in single quoted token",
+			source: `'can\'t'`,
+			want: []expectedToken{
+				{syntax.SingleQuotedString, `'can\'t'`},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "unterminated single quoted token",
+			source: `'hello`,
+			want: []expectedToken{
+				{syntax.ErrorToken, `'hello`},
 				{syntax.EOF, ""},
 			},
 		},
@@ -193,6 +217,17 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
+			name:   "parentheses",
+			source: `Localize('NEWLINE')`,
+			want: []expectedToken{
+				{syntax.Identifier, "Localize"},
+				{syntax.LParen, "("},
+				{syntax.SingleQuotedString, `'NEWLINE'`},
+				{syntax.RParen, ")"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
 			name:   "brackets adjacent to identifier",
 			source: `foo[bar]`,
 			want: []expectedToken{
@@ -200,6 +235,18 @@ func TestLex(t *testing.T) {
 				{syntax.LBracket, "["},
 				{syntax.Identifier, "bar"},
 				{syntax.RBracket, "]"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
+			name:   "parentheses are atom boundaries",
+			source: `foo(bar)baz`,
+			want: []expectedToken{
+				{syntax.Identifier, "foo"},
+				{syntax.LParen, "("},
+				{syntax.Identifier, "bar"},
+				{syntax.RParen, ")"},
+				{syntax.Identifier, "baz"},
 				{syntax.EOF, ""},
 			},
 		},
@@ -218,427 +265,49 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
-			name: "vic 3 state",
-			source: `STATE_LOMBARDY = {
-    id = 76
-    subsistence_building = "building_subsistence_farm"
-    provinces = { "x3F1E38" "x4713EE" "x50C060" "x70B8A9" "x867A90" "x9AC196" "xA40CE9" "xD04060" }
-    traits = { "state_trait_po_river" }
-    city = "xD04060"
-    farm = "x867A90"
-    mine = "x3F1E38"
-    wood = "x4713EE"
-    arable_land = 110
-    arable_resources = { "building_wheat_farm" "building_livestock_ranch" "building_cotton_plantation" "building_silk_plantation" "building_vineyard" }
-    capped_resources = {
-        building_iron_mine = 27
-        building_lead_mine = 19
-        building_logging_camp = 7
-    }
-    resource = {
-        type = "building_oil_rig"
-        undiscovered_amount = 20
-    }
-}`,
+			name:   "compact boundary characters",
+			source: `a={b="1"c=d}foo=bar#good`,
 			want: []expectedToken{
-				{syntax.Identifier, "STATE_LOMBARDY"},
-				{syntax.Whitespace, " "},
+				{syntax.Identifier, "a"},
 				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
 				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "id"},
-				{syntax.Whitespace, " "},
+				{syntax.Identifier, "b"},
 				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "76"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "subsistence_building"},
-				{syntax.Whitespace, " "},
+				{syntax.String, `"1"`},
+				{syntax.Identifier, "c"},
 				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_subsistence_farm"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "provinces"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x3F1E38"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x4713EE"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x50C060"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x70B8A9"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x867A90"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x9AC196"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"xA40CE9"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"xD04060"`},
-				{syntax.Whitespace, " "},
+				{syntax.Identifier, "d"},
 				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "traits"},
-				{syntax.Whitespace, " "},
+				{syntax.Identifier, "foo"},
 				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"state_trait_po_river"`},
-				{syntax.Whitespace, " "},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "city"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"xD04060"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "farm"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x867A90"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "mine"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x3F1E38"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "wood"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"x4713EE"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "arable_land"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "110"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "arable_resources"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_wheat_farm"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_livestock_ranch"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_cotton_plantation"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_silk_plantation"`},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_vineyard"`},
-				{syntax.Whitespace, " "},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "capped_resources"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "        "},
-				{syntax.Identifier, "building_iron_mine"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "27"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "        "},
-				{syntax.Identifier, "building_lead_mine"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "19"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "        "},
-				{syntax.Identifier, "building_logging_camp"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "7"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.Identifier, "resource"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "        "},
-				{syntax.Identifier, "type"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"building_oil_rig"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "        "},
-				{syntax.Identifier, "undiscovered_amount"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "20"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "    "},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.RCurly, "}"},
+				{syntax.Identifier, "bar"},
+				{syntax.Comment, "#good"},
 				{syntax.EOF, ""},
 			},
 		},
 		{
-			name: "vic 3 gui",
-			source: `types wargoal_types
-{
-	type add_wargoal_panel = default_block_window  {
-		name = "add_wargoal_panel"
-		datacontext = "[AddWarGoalPanel.AccessDiplomaticPlay]"
-
-		blockoverride "window_header_name" {
-			text = "ADD_WARGOAL_HEADER"
-		}
-
-		blockoverride "entire_back_button" {
-			back_button_large = {
-				position = { 8 30 }
-				onclick = "[AddWarGoalPanel.ClearSelectedWarGoalType]"
-				input_action = "back"
-				visible = "[AddWarGoalPanel.HasSelectedWarGoalType]"
-			}
-
-			back_button_large = {
-				position = { 8 30 }
-				onclick = "[InformationPanelBar.OpenPreviousPanel]"
-				input_action = "back"
-				visible = "[Not(AddWarGoalPanel.HasSelectedWarGoalType)]"
-			}
-		}
-	}
-}`,
+			name:   "vic 3 gui expression tokens",
+			source: `[ConcatIfNeitherEmpty(AddLocalizationIf(Condition, LocKey), Localize( 'NEWLINE' ))]`,
 			want: []expectedToken{
-				{syntax.Identifier, "types"},
+				{syntax.LBracket, "["},
+				{syntax.Identifier, "ConcatIfNeitherEmpty"},
+				{syntax.LParen, "("},
+				{syntax.Identifier, "AddLocalizationIf"},
+				{syntax.LParen, "("},
+				{syntax.Identifier, "Condition,"},
 				{syntax.Whitespace, " "},
-				{syntax.Identifier, "wargoal_types"},
-				{syntax.Newline, "\n"},
-
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t"},
-				{syntax.Identifier, "type"},
+				{syntax.Identifier, "LocKey"},
+				{syntax.RParen, ")"},
+				{syntax.Identifier, ","},
 				{syntax.Whitespace, " "},
-				{syntax.Identifier, "add_wargoal_panel"},
+				{syntax.Identifier, "Localize"},
+				{syntax.LParen, "("},
 				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
+				{syntax.SingleQuotedString, `'NEWLINE'`},
 				{syntax.Whitespace, " "},
-				{syntax.Identifier, "default_block_window"},
-				{syntax.Whitespace, "  "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t"},
-				{syntax.Identifier, "name"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"add_wargoal_panel"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t"},
-				{syntax.Identifier, "datacontext"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"[AddWarGoalPanel.AccessDiplomaticPlay]"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t"},
-				{syntax.Identifier, "blockoverride"},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"window_header_name"`},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t"},
-				{syntax.Identifier, "text"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"ADD_WARGOAL_HEADER"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t"},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t"},
-				{syntax.Identifier, "blockoverride"},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"entire_back_button"`},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t"},
-				{syntax.Identifier, "back_button_large"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "position"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "8"},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "30"},
-				{syntax.Whitespace, " "},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "onclick"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"[AddWarGoalPanel.ClearSelectedWarGoalType]"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "input_action"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"back"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "visible"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"[AddWarGoalPanel.HasSelectedWarGoalType]"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t"},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t"},
-				{syntax.Identifier, "back_button_large"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "position"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.LCurly, "{"},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "8"},
-				{syntax.Whitespace, " "},
-				{syntax.Number, "30"},
-				{syntax.Whitespace, " "},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "onclick"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"[InformationPanelBar.OpenPreviousPanel]"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "input_action"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"back"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t\t"},
-				{syntax.Identifier, "visible"},
-				{syntax.Whitespace, " "},
-				{syntax.Equals, "="},
-				{syntax.Whitespace, " "},
-				{syntax.String, `"[Not(AddWarGoalPanel.HasSelectedWarGoalType)]"`},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t\t"},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t\t"},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.Whitespace, "\t"},
-				{syntax.RCurly, "}"},
-				{syntax.Newline, "\n"},
-
-				{syntax.RCurly, "}"},
+				{syntax.RParen, ")"},
+				{syntax.RParen, ")"},
+				{syntax.RBracket, "]"},
 				{syntax.EOF, ""},
 			},
 		},

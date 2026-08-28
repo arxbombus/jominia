@@ -58,6 +58,15 @@ func TestTokenSourceCurrentRange(t *testing.T) {
 	}
 }
 
+func TestTokenSourceText(t *testing.T) {
+	const source = "foo = bar"
+	ts := NewTokenSource(source)
+
+	if got := ts.Text(); got != source {
+		t.Fatalf("expected %q, got %q", source, got)
+	}
+}
+
 func TestTokenSourcePrecedingLineBreak(t *testing.T) {
 	ts := NewTokenSource("foo bar\nbaz")
 
@@ -143,4 +152,58 @@ func TestTokenSourceFinalTrivia(t *testing.T) {
 			t.Errorf("trivia %d should be leading", i)
 		}
 	}
+}
+
+func TestTokenSourceLookaheadDoesNotAdvance(t *testing.T) {
+	ts := NewTokenSource("foo # comment\n= bar")
+
+	if got := ts.Nth(0); got != syntax.Identifier {
+		t.Fatalf("expected Nth(0) to be Identifier, got %s", got)
+	}
+
+	if got := ts.Nth(1); got != syntax.Equals {
+		t.Fatalf("expected Nth(1) to be Equals, got %s", got)
+	}
+
+	if got := ts.Nth(2); got != syntax.Identifier {
+		t.Fatalf("expected Nth(2) to be Identifier, got %s", got)
+	}
+
+	if got := ts.Current(); got != syntax.Identifier {
+		t.Fatalf("lookahead advanced token source to %s", got)
+	}
+
+	ts.Bump()
+
+	if got := ts.Current(); got != syntax.Equals {
+		t.Fatalf("expected Equals after bump, got %s", got)
+	}
+
+	if !ts.HasPrecedingLineBreak() {
+		t.Fatal("expected Equals to have a preceding line break")
+	}
+}
+
+func TestTokenSourceLookaheadPastEndReturnsEOF(t *testing.T) {
+	ts := NewTokenSource("foo")
+
+	if got := ts.Nth(1); got != syntax.EOF {
+		t.Fatalf("expected Nth(1) to be EOF, got %s", got)
+	}
+
+	if got := ts.Nth(10); got != syntax.EOF {
+		t.Fatalf("expected lookahead past EOF to return EOF, got %s", got)
+	}
+}
+
+func TestTokenSourceNegativeLookaheadPanics(t *testing.T) {
+	ts := NewTokenSource("foo")
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected negative lookahead to panic")
+		}
+	}()
+
+	ts.Nth(-1)
 }

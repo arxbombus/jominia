@@ -7,12 +7,14 @@ import (
 	"github.com/arxbombus/jominia/internal/text"
 )
 
+// Lexer tokenizes Jomini source text.
 type Lexer struct {
 	source     string
 	position   text.TextSize
 	sourceSize text.TextSize
 }
 
+// NewLexer returns a Lexer positioned at the start of source.
 func NewLexer(source string) *Lexer {
 	return &Lexer{
 		source:     source,
@@ -20,6 +22,7 @@ func NewLexer(source string) *Lexer {
 	}
 }
 
+// Next scans and returns the next token.
 func (l *Lexer) Next() Token {
 	start := l.position
 
@@ -49,6 +52,12 @@ func (l *Lexer) Next() Token {
 	case ']':
 		l.position++
 		return l.token(syntax.RBracket, start)
+	case '(':
+		l.position++
+		return l.token(syntax.LParen, start)
+	case ')':
+		l.position++
+		return l.token(syntax.RParen, start)
 	case '=':
 		l.position++
 		if l.eat('=') {
@@ -60,7 +69,7 @@ func (l *Lexer) Next() Token {
 		if l.eat('=') {
 			return l.token(syntax.BangEquals, start)
 		}
-		return l.token(syntax.ErrorToken, start)
+		return l.token(syntax.Bang, start)
 	case '<':
 		l.position++
 		if l.eat('=') {
@@ -82,8 +91,8 @@ func (l *Lexer) Next() Token {
 	case ';':
 		l.position++
 		return l.token(syntax.Semicolon, start)
-	case '"':
-		kind := l.scanString()
+	case '"', '\'':
+		kind := l.scanString(l.source[l.position])
 		return l.token(kind, start)
 	default:
 		l.scanAtom()
@@ -96,6 +105,7 @@ func (l *Lexer) Next() Token {
 	}
 }
 
+// Lex tokenizes source, including trivia and the final EOF token.
 func Lex(source string) []Token {
 	l := NewLexer(source)
 
@@ -110,6 +120,7 @@ func Lex(source string) []Token {
 	}
 }
 
+// token returns a token spanning start through the current lexer position.
 func (l *Lexer) token(kind syntax.SyntaxKind, start text.TextSize) Token {
 	return Token{
 		Kind:  kind,
@@ -117,6 +128,7 @@ func (l *Lexer) token(kind syntax.SyntaxKind, start text.TextSize) Token {
 	}
 }
 
+// eat consumes expected if it is the current byte.
 func (l *Lexer) eat(expected byte) bool {
 	if l.position >= l.sourceSize {
 		return false
@@ -130,6 +142,7 @@ func (l *Lexer) eat(expected byte) bool {
 	return true
 }
 
+// scanWhitespace consumes consecutive spaces and tabs.
 func (l *Lexer) scanWhitespace() {
 	for l.position < l.sourceSize {
 		switch l.source[l.position] {
@@ -141,6 +154,7 @@ func (l *Lexer) scanWhitespace() {
 	}
 }
 
+// scanNewline consumes one newline, treating CRLF as a single newline.
 func (l *Lexer) scanNewline() {
 	if l.source[l.position] == '\r' {
 		l.position++
@@ -155,6 +169,7 @@ func (l *Lexer) scanNewline() {
 	l.position++
 }
 
+// scanComment consumes a comment up to, but not including, the next newline.
 func (l *Lexer) scanComment() {
 	for l.position < l.sourceSize {
 		switch l.source[l.position] {
@@ -166,22 +181,27 @@ func (l *Lexer) scanComment() {
 	}
 }
 
-func (l *Lexer) scanString() syntax.SyntaxKind {
+// scanString consumes a quoted string and returns ErrorToken if it is unterminated.
+func (l *Lexer) scanString(quoteType byte) syntax.SyntaxKind {
+	kind := syntax.String
+	if quoteType == '\'' {
+		kind = syntax.SingleQuotedString
+	}
+
 	l.position++
 
 	for l.position < l.sourceSize {
 		switch l.source[l.position] {
-		case '"':
-			l.position++
-			return syntax.String
-		// We don't handle escapes.
 		case '\\':
 			l.position++
-
 			if l.position < l.sourceSize {
 				l.position++
 			}
 		default:
+			if l.source[l.position] == quoteType {
+				l.position++
+				return kind
+			}
 			l.position++
 		}
 	}
@@ -189,6 +209,7 @@ func (l *Lexer) scanString() syntax.SyntaxKind {
 	return syntax.ErrorToken
 }
 
+// scanAtom consumes bytes until the next atom boundary.
 func (l *Lexer) scanAtom() {
 	for l.position < l.sourceSize {
 		if isAtomBoundary(l.source[l.position]) {
@@ -199,6 +220,7 @@ func (l *Lexer) scanAtom() {
 	}
 }
 
+// isAtomBoundary reports whether char terminates an unquoted atom.
 func isAtomBoundary(char byte) bool {
 	switch char {
 	case ' ', '\t',
@@ -206,12 +228,13 @@ func isAtomBoundary(char byte) bool {
 		'#',
 		'{', '}',
 		'[', ']',
+		'(', ')',
 		'=',
 		'!',
 		'<', '>',
 		'?',
 		';',
-		'"':
+		'"', '\'':
 		return true
 	default:
 		return false
