@@ -91,6 +91,9 @@ func (l *Lexer) Next() Token {
 	case ';':
 		l.position++
 		return l.token(syntax.Semicolon, start)
+	case ',':
+		l.position++
+		return l.token(syntax.Comma, start)
 	case '"', '\'':
 		kind := l.scanString(l.source[l.position])
 		return l.token(kind, start)
@@ -234,6 +237,7 @@ func isAtomBoundary(char byte) bool {
 		'<', '>',
 		'?',
 		';',
+		',',
 		'"', '\'':
 		return true
 	default:

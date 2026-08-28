@@ -38,6 +38,7 @@ const (
 	Question
 	QuestionEquals
 	Semicolon
+	Comma
 
 	// Syntax nodes.
 	Root
@@ -143,6 +144,8 @@ func (k SyntaxKind) String() string {
 		return "QuestionEquals"
 	case Semicolon:
 		return "Semicolon"
+	case Comma:
+		return "Comma"
 	case Root:
 		return "Root"
 	case Entry:
