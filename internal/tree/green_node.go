@@ -17,8 +17,13 @@ type GreenNode struct {
 func NewGreenNode(kind RawSyntaxKind, children []GreenElement) *GreenNode {
 	ownedChildren := make([]GreenElement, len(children))
 	copy(ownedChildren, children)
+	return newGreenNodeOwned(kind, ownedChildren)
+}
+
+// newGreenNodeOwned returns a green node that takes ownership of children.
+func newGreenNodeOwned(kind RawSyntaxKind, children []GreenElement) *GreenNode {
 	var textLen text.TextSize
-	for _, child := range ownedChildren {
+	for _, child := range children {
 		validateGreenElement(child)
 		childLen := child.TextLen()
 		if childLen > ^text.TextSize(0)-textLen {
@@ -27,7 +32,7 @@ func NewGreenNode(kind RawSyntaxKind, children []GreenElement) *GreenNode {
 		textLen += childLen
 	}
 	return &GreenNode{
-		children: ownedChildren,
+		children: children,
 		textLen:  textLen,
 		kind:     kind,
 	}
