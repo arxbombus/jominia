@@ -45,6 +45,11 @@ func (p *Parser) Start() Marker {
 	}
 }
 
+// Finish returns the parser events and retained trivia.
+func (p *Parser) Finish() ([]Event, []Trivia) {
+	return p.events, p.source.Finish()
+}
+
 // Bump emits the current token and advances to the next non-trivia token.
 func (p *Parser) Bump() {
 	kind := p.Current()

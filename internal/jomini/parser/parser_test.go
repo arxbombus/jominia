@@ -140,3 +140,33 @@ func TestParserBumpAtEOFDoesNothing(t *testing.T) {
 		t.Fatalf("expected parser to remain at EOF, got %s", p.Current())
 	}
 }
+
+func TestParserFinishReturnsEventsAndTrivia(t *testing.T) {
+	p := NewParser("foo = bar\n")
+
+	p.Bump()
+	p.Bump()
+	p.Bump()
+
+	events, trivia := p.Finish()
+
+	if len(events) != 3 {
+		t.Fatalf("expected 3 events, got %d", len(events))
+	}
+
+	if len(trivia) != 3 {
+		t.Fatalf("expected 3 trivia pieces, got %d", len(trivia))
+	}
+
+	if trivia[0].Kind != syntax.Whitespace || !trivia[0].IsTrailing {
+		t.Errorf("expected first trivia to be trailing whitespace")
+	}
+
+	if trivia[1].Kind != syntax.Whitespace || !trivia[1].IsTrailing {
+		t.Errorf("expected second trivia to be trailing whitespace")
+	}
+
+	if trivia[2].Kind != syntax.Newline || trivia[2].IsTrailing {
+		t.Errorf("expected final newline to be leading trivia")
+	}
+}
