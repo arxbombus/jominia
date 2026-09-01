@@ -15,6 +15,7 @@ type Trivia struct {
 
 type tokenLookahead struct {
 	kind                  syntax.SyntaxKind
+	textRange             text.TextRange
 	hasPrecedingLineBreak bool
 }
 
@@ -48,6 +49,12 @@ func (ts *TokenSource) CurrentRange() text.TextRange {
 	return ts.current.Range
 }
 
+// NthRange returns the source range of the nth non-trivia token without
+// consuming it. NthRange(0) is equivalent to CurrentRange.
+func (ts *TokenSource) NthRange(n int) text.TextRange {
+	return ts.nth(n).textRange
+}
+
 // Text returns the original source text.
 func (ts *TokenSource) Text() string {
 	return ts.source
@@ -76,6 +83,11 @@ func (ts *TokenSource) Bump() {
 	ts.nextNonTriviaToken(false)
 }
 
+// ReLex replaces the current token with one scanned in context.
+func (ts *TokenSource) ReLex(context lexer.ReLexContext) {
+	ts.current = ts.lexer.ReLex(ts.current, context)
+}
+
 // Finish returns the trivia collected while advancing the token source.
 //
 // Lexer diagnostics may also be returned here in the future.
@@ -88,7 +100,11 @@ func (ts *TokenSource) nth(n int) tokenLookahead {
 		panic("token source: lookahead index must be non-negative")
 	}
 	if n == 0 {
-		return tokenLookahead{kind: ts.current.Kind, hasPrecedingLineBreak: ts.hasPrecedingLineBreak}
+		return tokenLookahead{
+			kind:                  ts.current.Kind,
+			textRange:             ts.current.Range,
+			hasPrecedingLineBreak: ts.hasPrecedingLineBreak,
+		}
 	}
 	lookaheadLexer := *ts.lexer
 	index := 1
@@ -102,7 +118,11 @@ func (ts *TokenSource) nth(n int) tokenLookahead {
 			continue
 		}
 		if index == n || token.Kind == syntax.EOF {
-			return tokenLookahead{kind: token.Kind, hasPrecedingLineBreak: hasPrecedingLineBreak}
+			return tokenLookahead{
+				kind:                  token.Kind,
+				textRange:             token.Range,
+				hasPrecedingLineBreak: hasPrecedingLineBreak,
+			}
 		}
 		index++
 		hasPrecedingLineBreak = false

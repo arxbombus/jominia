@@ -436,23 +436,169 @@ func TestGrammarOpaqueGroupsRemainStructured(t *testing.T) {
 	}
 }
 
-func TestGrammarDeferredInterpolatedExpressionRemainsLossless(t *testing.T) {
-	root := parseGrammarTree(t, `@third = @[1/3]`)
-
-	assertRootStatementKinds(t, root, []syntax.SyntaxKind{syntax.BinaryStatement})
-
-	if len(grammarNodesOfKind(root, syntax.BracketGroup)) != 1 {
-		t.Fatal("expected interpolated expression body to remain a bracket group")
-	}
-}
-
-func TestGrammarDeferredEU4ParameterSyntaxRemainsLossless(t *testing.T) {
-	parseGrammarTree(t, `generate_advisor = {
+func TestGrammarParsesConditionalBlocks(t *testing.T) {
+	root := parseGrammarTree(t, `generate_advisor = {
     [[scaled_skill]
         $scaled_skill$
     ]
     [[!skill] if = {} ]
 }`)
+
+	conditionals := grammarNodesOfKind(root, syntax.ConditionalBlock)
+	if len(conditionals) != 2 {
+		t.Fatalf("conditional block count = %d, want 2", len(conditionals))
+	}
+
+	headers := grammarNodesOfKind(root, syntax.ConditionalHeader)
+	if len(headers) != 2 {
+		t.Fatalf("conditional header count = %d, want 2", len(headers))
+	}
+	wantHeaders := [][]string{
+		{"[", "scaled_skill", "]"},
+		{"[", "!", "skill", "]"},
+	}
+	for index, header := range headers {
+		if got := grammarTokenTexts(header); !reflect.DeepEqual(got, wantHeaders[index]) {
+			t.Errorf("header %d tokens:\n got: %v\nwant: %v", index, got, wantHeaders[index])
+		}
+	}
+
+	firstBody := grammarNodesOfKind(conditionals[0], syntax.StatementList)
+	if len(firstBody) != 1 {
+		t.Fatalf("first conditional body count = %d, want 1", len(firstBody))
+	}
+	if got, want := directGrammarNodeKinds(firstBody[0]), []syntax.SyntaxKind{syntax.ValueStatement}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("first conditional body:\n got: %v\nwant: %v", got, want)
+	}
+
+	secondBody := grammarNodesOfKind(conditionals[1], syntax.StatementList)
+	if len(secondBody) != 2 {
+		// The second entry is the StatementList inside if = {}.
+		t.Fatalf("second conditional statement-list count = %d, want 2", len(secondBody))
+	}
+	if got, want := directGrammarNodeKinds(secondBody[0]), []syntax.SyntaxKind{syntax.BlockStatement}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("second conditional body:\n got: %v\nwant: %v", got, want)
+	}
+}
+
+func TestGrammarConditionalBlockRequiresAdjacentOpeners(t *testing.T) {
+	conditional := parseGrammarTree(t, `[[enabled] value]`)
+	if got := len(grammarNodesOfKind(conditional, syntax.ConditionalBlock)); got != 1 {
+		t.Fatalf("adjacent conditional count = %d, want 1", got)
+	}
+
+	ordinary := parseGrammarTree(t, `[ [enabled] value ]`)
+	if got := len(grammarNodesOfKind(ordinary, syntax.ConditionalBlock)); got != 0 {
+		t.Fatalf("spaced conditional count = %d, want 0", got)
+	}
+	if got := len(grammarNodesOfKind(ordinary, syntax.BracketGroup)); got != 2 {
+		t.Fatalf("ordinary bracket group count = %d, want 2", got)
+	}
+}
+
+func TestGrammarParsesNestedConditionalBlocks(t *testing.T) {
+	root := parseGrammarTree(t, `[[outer] [[inner] value] ]`)
+	if got := len(grammarNodesOfKind(root, syntax.ConditionalBlock)); got != 2 {
+		t.Fatalf("conditional block count = %d, want 2", got)
+	}
+}
+
+func TestGrammarParsesInlineMathPrecedence(t *testing.T) {
+	root := parseGrammarTree(t, `@third = @[1/3+4*2]`)
+	assertRootStatementKinds(t, root, []syntax.SyntaxKind{syntax.BinaryStatement})
+
+	inlineMath := grammarNodesOfKind(root, syntax.InlineMath)
+	if len(inlineMath) != 1 {
+		t.Fatalf("inline math count = %d, want 1", len(inlineMath))
+	}
+	if got, want := directGrammarNodeKinds(inlineMath[0]), []syntax.SyntaxKind{syntax.BinaryExpression}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("inline math children:\n got: %v\nwant: %v", got, want)
+	}
+
+	expressions := grammarNodesOfKind(root, syntax.BinaryExpression)
+	if len(expressions) != 3 {
+		t.Fatalf("binary expression count = %d, want 3", len(expressions))
+	}
+	if got, want := directGrammarTokenKinds(expressions[0]), []syntax.SyntaxKind{syntax.Plus}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("outer operator:\n got: %v\nwant: %v", got, want)
+	}
+	if got, want := directGrammarTokenKinds(expressions[1]), []syntax.SyntaxKind{syntax.Slash}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("left operator:\n got: %v\nwant: %v", got, want)
+	}
+	if got, want := directGrammarTokenKinds(expressions[2]), []syntax.SyntaxKind{syntax.Star}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("right operator:\n got: %v\nwant: %v", got, want)
+	}
+}
+
+func TestGrammarInlineMathIsLeftAssociative(t *testing.T) {
+	root := parseGrammarTree(t, `value = @[8/4/2]`)
+	expressions := grammarNodesOfKind(root, syntax.BinaryExpression)
+	if len(expressions) != 2 {
+		t.Fatalf("binary expression count = %d, want 2", len(expressions))
+	}
+	if got, want := directGrammarNodeKinds(expressions[0]), []syntax.SyntaxKind{syntax.BinaryExpression, syntax.NumberExpression}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("outer expression children:\n got: %v\nwant: %v", got, want)
+	}
+}
+
+func TestGrammarParsesInlineMathFactors(t *testing.T) {
+	root := parseGrammarTree(t, `value = @[-(@base + |$DELTA|2$|)]`)
+	wantCounts := map[syntax.SyntaxKind]int{
+		syntax.InlineMath:              1,
+		syntax.UnaryExpression:         1,
+		syntax.ParenthesizedExpression: 1,
+		syntax.NameExpression:          1,
+		syntax.AbsoluteExpression:      1,
+		syntax.ParameterExpression:     1,
+	}
+	for kind, want := range wantCounts {
+		if got := len(grammarNodesOfKind(root, kind)); got != want {
+			t.Errorf("%s count = %d, want %d", kind, got, want)
+		}
+	}
+}
+
+func TestGrammarInlineMathTreatsBooleanWordsAsNames(t *testing.T) {
+	root := parseGrammarTree(t, `value = @[yes+no]`)
+	if got := len(grammarNodesOfKind(root, syntax.NameExpression)); got != 2 {
+		t.Fatalf("name expression count = %d, want 2", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+		t.Fatalf("bogus expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarParsesEscapedInlineMathStart(t *testing.T) {
+	root := parseGrammarTree(t, `value = @\[1+2]`)
+	if got := len(grammarNodesOfKind(root, syntax.InlineMath)); got != 1 {
+		t.Fatalf("inline math count = %d, want 1", got)
+	}
+}
+
+func TestGrammarRecoversMalformedInlineMath(t *testing.T) {
+	root := parseGrammarTree(t, "value = @[1 + ]\ngood = yes")
+	assertRootStatementKinds(t, root, []syntax.SyntaxKind{
+		syntax.BinaryStatement,
+		syntax.BinaryStatement,
+	})
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 1 {
+		t.Fatalf("bogus expression count = %d, want 1", got)
+	}
+}
+
+func TestGrammarRecoversMalformedInlineMathParameter(t *testing.T) {
+	root := parseGrammarTree(t, `value = @[$MISSING+1]`)
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 1 {
+		t.Fatalf("bogus expression count = %d, want 1", got)
+	}
+}
+
+func TestGrammarMissingInlineMathCloseRecoversAtLineBreak(t *testing.T) {
+	root := parseGrammarTree(t, "value = @[1+2\ngood = yes")
+	assertRootStatementKinds(t, root, []syntax.SyntaxKind{
+		syntax.BinaryStatement,
+		syntax.BinaryStatement,
+	})
 }
 
 func TestGrammarExplorationCorpusIsLossless(t *testing.T) {

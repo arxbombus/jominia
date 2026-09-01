@@ -3,6 +3,7 @@ package parser
 import (
 	"testing"
 
+	"github.com/arxbombus/jominia/internal/script/lexer"
 	"github.com/arxbombus/jominia/internal/script/syntax"
 )
 
@@ -55,6 +56,44 @@ func TestTokenSourceCurrentRange(t *testing.T) {
 
 	if r.End() != 5 {
 		t.Errorf("expected end 5, got %d", r.End())
+	}
+}
+
+func TestTokenSourceNthRange(t *testing.T) {
+	ts := NewTokenSource("[[condition]")
+
+	if got := ts.NthRange(0); got.Start() != 0 || got.End() != 1 {
+		t.Fatalf("NthRange(0) = [%d,%d), want [0,1)", got.Start(), got.End())
+	}
+	if got := ts.NthRange(1); got.Start() != 1 || got.End() != 2 {
+		t.Fatalf("NthRange(1) = [%d,%d), want [1,2)", got.Start(), got.End())
+	}
+}
+
+func TestTokenSourceReLexesInlineMathAndRestoresNormalMode(t *testing.T) {
+	ts := NewTokenSource(`@[1/3] next-value`)
+	if ts.Current() != syntax.InlineMathStart {
+		t.Fatalf("current = %s, want InlineMathStart", ts.Current())
+	}
+
+	ts.Bump()
+	if ts.Current() != syntax.Identifier {
+		t.Fatalf("normal interior = %s, want Identifier", ts.Current())
+	}
+	ts.ReLex(lexer.ReLexInlineMath)
+
+	want := []syntax.SyntaxKind{
+		syntax.Number,
+		syntax.Slash,
+		syntax.Number,
+		syntax.RBracket,
+		syntax.Identifier,
+	}
+	for _, kind := range want {
+		if ts.Current() != kind {
+			t.Fatalf("current = %s, want %s", ts.Current(), kind)
+		}
+		ts.Bump()
 	}
 }
 

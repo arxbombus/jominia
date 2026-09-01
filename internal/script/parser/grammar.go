@@ -47,7 +47,13 @@ func parseStatementList(parser *Parser, endKind syntax.SyntaxKind) {
 // parseStatement parses a single statement and reports whether parsing succeeded.
 func parseStatement(parser *Parser) bool {
 	switch {
+	case isConditionalBlockStart(parser):
+		parseConditionalBlock(parser)
+		return true
 	case parser.At(syntax.LCurly), parser.At(syntax.LBracket):
+		parseValueStatement(parser)
+		return true
+	case parser.At(syntax.InlineMathStart):
 		parseValueStatement(parser)
 		return true
 	case parser.Current().IsScalar():
@@ -68,7 +74,7 @@ func parseStatement(parser *Parser) bool {
 				parseValueStatement(parser)
 			}
 		default:
-			panic("grammar: unknown block header status")
+			panic("grammar(script): unknown block header status")
 		}
 
 		return true
@@ -82,7 +88,7 @@ func parseStatement(parser *Parser) bool {
 func parseValueStatement(parser *Parser) {
 	statement := parser.Start()
 	if !parseValue(parser) {
-		panic("grammar: expected value statement")
+		panic("grammar(script): expected value statement")
 	}
 	parser.Eat(syntax.Semicolon)
 	statement.Complete(parser, syntax.ValueStatement)
@@ -92,11 +98,11 @@ func parseValueStatement(parser *Parser) {
 func parseBinaryStatement(parser *Parser) {
 	statement := parser.Start()
 	if !parser.Current().IsScalar() {
-		panic("grammar: binary statement must begin with a scalar")
+		panic("grammar(script): binary statement must begin with a scalar")
 	}
 	parser.Bump()
 	if !parser.Current().IsOperator() {
-		panic("grammar: binary statement is missing an operator")
+		panic("grammar(script): binary statement is missing an operator")
 	}
 	parser.Bump()
 	parseValueList(parser)
@@ -109,7 +115,7 @@ func parseBlockStatement(parser *Parser, shape blockHeaderShape) {
 	statement := parser.Start()
 	parseBlockHeader(parser, shape)
 	if !parser.At(syntax.LCurly) {
-		panic("grammar: block header is not followed by a block")
+		panic("grammar(script): block header is not followed by a block")
 	}
 	parseBlock(parser)
 	parser.Eat(syntax.Semicolon)
@@ -122,7 +128,7 @@ func parseBlockHeader(parser *Parser, shape blockHeaderShape) {
 	parseScalarList(parser, shape.leadingScalars)
 	if shape.hasOperator {
 		if !parser.Current().IsOperator() {
-			panic("grammar: expected block header operator")
+			panic("grammar(script): expected block header operator")
 		}
 		parser.Bump()
 	}
@@ -135,15 +141,15 @@ func parseBlockHeader(parser *Parser, shape blockHeaderShape) {
 // parseScalarList parses exactly count adjacent scalars.
 func parseScalarList(parser *Parser, count int) {
 	if count <= 0 {
-		panic("grammar: scalar list must contain at least one scalar")
+		panic("grammar(script): scalar list must contain at least one scalar")
 	}
 	list := parser.Start()
 	for i := 0; i < count; i++ {
 		if !parser.Current().IsScalar() {
-			panic("grammar: expected scalar in scalar list")
+			panic("grammar(script): expected scalar in scalar list")
 		}
 		if i > 0 && parser.HasPrecedingLineBreak() {
-			panic("grammar: scalar list cannot cross a line break")
+			panic("grammar(script): scalar list cannot cross a line break")
 		}
 		parser.Bump()
 	}
@@ -156,6 +162,9 @@ func parseValueList(parser *Parser) {
 	if parseValue(parser) {
 		for !isValueListTerminator(parser.Current()) {
 			if parser.HasPrecedingLineBreak() {
+				break
+			}
+			if isConditionalBlockStart(parser) {
 				break
 			}
 			if isBlockLikeStatementStart(parser) {
@@ -188,6 +197,9 @@ func parseValue(parser *Parser) bool {
 	case parser.At(syntax.LBracket):
 		parseBracketGroup(parser)
 		return true
+	case parser.At(syntax.InlineMathStart):
+		parseInlineMath(parser)
+		return true
 	default:
 		return false
 	}
@@ -197,7 +209,7 @@ func parseValue(parser *Parser) bool {
 func parseBlock(parser *Parser) {
 	block := parser.Start()
 	if !parser.Eat(syntax.LCurly) {
-		panic("grammar: expected opening block delimiter")
+		panic("grammar(script): expected opening block delimiter")
 	}
 	parseStatementList(parser, syntax.RCurly)
 	parser.Eat(syntax.RCurly)
@@ -218,7 +230,7 @@ func parseParenGroup(parser *Parser) {
 func parseOpaque(parser *Parser, startKind, endKind, nodeKind syntax.SyntaxKind) {
 	opaque := parser.Start()
 	if !parser.Eat(startKind) {
-		panic("grammar: expected start delimiter not found")
+		panic("grammar(script): expected start delimiter not found")
 	}
 	for !parser.At(endKind) && !parser.At(syntax.EOF) {
 		if isClosingDelimiter(parser.Current()) {
@@ -330,7 +342,7 @@ func parseBogusBlockStatement(parser *Parser, blockOffset int) {
 		parser.Bump()
 	}
 	if !parser.At(syntax.LCurly) {
-		panic("grammar: malformed block statement is missing its block")
+		panic("grammar(script): malformed block statement is missing its block")
 	}
 	parseBlock(parser)
 	parser.Eat(syntax.Semicolon)
@@ -390,7 +402,9 @@ func recoverStatement(parser *Parser, endKind syntax.SyntaxKind) {
 
 // isStrongStatementStart reports whether the current token begins a statement with enough structure to be a useful recovery boundary.
 func isStrongStatementStart(parser *Parser) bool {
-	if parser.At(syntax.LCurly) || parser.At(syntax.LBracket) {
+	if parser.At(syntax.LCurly) ||
+		parser.At(syntax.LBracket) ||
+		parser.At(syntax.InlineMathStart) {
 		return true
 	}
 	if !parser.Current().IsScalar() {
@@ -421,4 +435,36 @@ func isClosingDelimiter(kind syntax.SyntaxKind) bool {
 	return kind == syntax.RCurly ||
 		kind == syntax.RBracket ||
 		kind == syntax.RParen
+}
+
+// isConditionalBlockStart recognizes the adjacent [[ opener without changing how ordinary, possibly nested bracket groups are tokenized.
+func isConditionalBlockStart(parser *Parser) bool {
+	return parser.At(syntax.LBracket) &&
+		parser.Nth(1) == syntax.LBracket &&
+		parser.CurrentRange().End() == parser.NthRange(1).Start()
+}
+
+// parseConditionalBlock parses [[CONDITION] statements...]. The outer pair of brackets bounds the block; ConditionalHeader owns the nested [CONDITION] pair. The body deliberately reuses StatementList so nested conditionals and all ordinary statements share the same recovery behavior.
+func parseConditionalBlock(parser *Parser) {
+	conditional := parser.Start()
+	if !parser.Eat(syntax.LBracket) {
+		panic("grammar(script): expected conditional block opener")
+	}
+	parseConditionalHeader(parser)
+	parseStatementList(parser, syntax.RBracket)
+	parser.Eat(syntax.RBracket)
+	conditional.Complete(parser, syntax.ConditionalBlock)
+}
+
+func parseConditionalHeader(parser *Parser) {
+	header := parser.Start()
+	if !parser.Eat(syntax.LBracket) {
+		panic("grammar(script): expected conditional header opener")
+	}
+	parser.Eat(syntax.Bang)
+	if parser.Current().IsScalar() {
+		parser.Bump()
+	}
+	parser.Eat(syntax.RBracket)
+	header.Complete(parser, syntax.ConditionalHeader)
 }

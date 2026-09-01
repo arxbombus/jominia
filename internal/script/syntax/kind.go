@@ -40,6 +40,17 @@ const (
 	QuestionEquals
 	Semicolon
 	Comma
+	InlineMathStart
+	At
+	Dollar
+	Pipe
+	Plus
+	Minus
+	Star
+	Slash
+	Percent
+	ParameterName
+	ParameterArgument
 
 	// Syntax nodes.
 	Root
@@ -53,9 +64,20 @@ const (
 	Block
 	BracketGroup
 	ParenGroup
+	ConditionalBlock
+	ConditionalHeader
+	InlineMath
+	NumberExpression
+	NameExpression
+	ParameterExpression
+	UnaryExpression
+	BinaryExpression
+	ParenthesizedExpression
+	AbsoluteExpression
 
 	// Error-recovery nodes.
 	BogusStatement
+	BogusExpression
 )
 
 func (k SyntaxKind) Raw() tree.RawSyntaxKind {
@@ -71,7 +93,7 @@ func (k SyntaxKind) IsTrivia() bool {
 }
 
 func (k SyntaxKind) IsBogus() bool {
-	return k == BogusStatement
+	return k == BogusStatement || k == BogusExpression
 }
 
 // IsOperator reports whether k is an operator.
@@ -155,6 +177,28 @@ func (k SyntaxKind) String() string {
 		return "Semicolon"
 	case Comma:
 		return "Comma"
+	case InlineMathStart:
+		return "InlineMathStart"
+	case At:
+		return "At"
+	case Dollar:
+		return "Dollar"
+	case Pipe:
+		return "Pipe"
+	case Plus:
+		return "Plus"
+	case Minus:
+		return "Minus"
+	case Star:
+		return "Star"
+	case Slash:
+		return "Slash"
+	case Percent:
+		return "Percent"
+	case ParameterName:
+		return "ParameterName"
+	case ParameterArgument:
+		return "ParameterArgument"
 	case Root:
 		return "Root"
 	case StatementList:
@@ -177,8 +221,30 @@ func (k SyntaxKind) String() string {
 		return "BracketGroup"
 	case ParenGroup:
 		return "ParenGroup"
+	case ConditionalBlock:
+		return "ConditionalBlock"
+	case ConditionalHeader:
+		return "ConditionalHeader"
+	case InlineMath:
+		return "InlineMath"
+	case NumberExpression:
+		return "NumberExpression"
+	case NameExpression:
+		return "NameExpression"
+	case ParameterExpression:
+		return "ParameterExpression"
+	case UnaryExpression:
+		return "UnaryExpression"
+	case BinaryExpression:
+		return "BinaryExpression"
+	case ParenthesizedExpression:
+		return "ParenthesizedExpression"
+	case AbsoluteExpression:
+		return "AbsoluteExpression"
 	case BogusStatement:
 		return "BogusStatement"
+	case BogusExpression:
+		return "BogusExpression"
 	default:
 		return "Unknown"
 	}

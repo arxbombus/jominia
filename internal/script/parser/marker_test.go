@@ -144,3 +144,39 @@ func TestMarkerCompleteCreatesNestedNodeEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletedMarkerPrecedeWrapsAnExistingNode(t *testing.T) {
+	p := NewParser("1")
+
+	number := p.Start()
+	p.Bump()
+	completedNumber := number.Complete(p, syntax.NumberExpression)
+
+	// Force Start to reallocate the slice during Precede.
+	p.events = p.events[:len(p.events):len(p.events)]
+	parent := completedNumber.Precede(p)
+	parent.Complete(p, syntax.UnaryExpression)
+
+	events := p.Events()
+	if got := events[0].ForwardParent; got != 3 {
+		t.Fatalf("forward parent = %d, want 3", got)
+	}
+
+	sink := &recordingTreeSink{}
+	processEvents(sink, events)
+	want := []treeSinkCall{
+		{eventType: EventStart, kind: syntax.UnaryExpression},
+		{eventType: EventStart, kind: syntax.NumberExpression},
+		{eventType: EventToken, kind: syntax.Number, end: 1},
+		{eventType: EventFinish},
+		{eventType: EventFinish},
+	}
+	if len(sink.calls) != len(want) {
+		t.Fatalf("sink call count = %d, want %d", len(sink.calls), len(want))
+	}
+	for index, call := range sink.calls {
+		if call != want[index] {
+			t.Errorf("sink call %d = %+v, want %+v", index, call, want[index])
+		}
+	}
+}

@@ -109,6 +109,9 @@ func TestBogusKinds(t *testing.T) {
 	if !BogusStatement.IsBogus() {
 		t.Error("BogusStatement should be bogus")
 	}
+	if !BogusExpression.IsBogus() {
+		t.Error("BogusExpression should be bogus")
+	}
 
 	if BinaryStatement.IsBogus() {
 		t.Error("BinaryStatement should not be bogus")
@@ -124,6 +127,8 @@ func TestSyntaxKindString(t *testing.T) {
 		{LParen, "LParen"},
 		{RParen, "RParen"},
 		{Bang, "Bang"},
+		{InlineMathStart, "InlineMathStart"},
+		{ParameterArgument, "ParameterArgument"},
 		{Root, "Root"},
 		{StatementList, "StatementList"},
 		{ValueStatement, "ValueStatement"},
@@ -135,7 +140,13 @@ func TestSyntaxKindString(t *testing.T) {
 		{Block, "Block"},
 		{BracketGroup, "BracketGroup"},
 		{ParenGroup, "ParenGroup"},
+		{ConditionalBlock, "ConditionalBlock"},
+		{ConditionalHeader, "ConditionalHeader"},
+		{InlineMath, "InlineMath"},
+		{BinaryExpression, "BinaryExpression"},
+		{AbsoluteExpression, "AbsoluteExpression"},
 		{BogusStatement, "BogusStatement"},
+		{BogusExpression, "BogusExpression"},
 	}
 
 	for _, test := range tests {

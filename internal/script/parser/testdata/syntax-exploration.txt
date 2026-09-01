@@ -430,9 +430,6 @@ foo_after_bare {}
 
 # ============================================================================
 # EU4 [[parameter] ... ] syntax
-#
-# Intentionally deferred. These examples should remain in the corpus so we can
-# compare CST behavior before and after implementing the dedicated grammar.
 # ============================================================================
 
 generate_advisor = {

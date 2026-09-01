@@ -1,6 +1,10 @@
 package parser
 
-import "github.com/arxbombus/jominia/internal/script/syntax"
+import (
+	"github.com/arxbombus/jominia/internal/script/lexer"
+	"github.com/arxbombus/jominia/internal/script/syntax"
+	"github.com/arxbombus/jominia/internal/text"
+)
 
 // Parser consumes tokens and records syntax events.
 type Parser struct {
@@ -26,8 +30,17 @@ func (p *Parser) Nth(n int) syntax.SyntaxKind {
 	return p.source.Nth(n)
 }
 
-// NthHasPrecedingLineBreak reports whether the nth non-trivia lookahead token
-// is preceded by a newline.
+// CurrentRange returns the source range of the current token.
+func (p *Parser) CurrentRange() text.TextRange {
+	return p.source.CurrentRange()
+}
+
+// NthRange returns the source range of the nth non-trivia token without consuming it. NthRange(0) is equivalent to CurrentRange.
+func (p *Parser) NthRange(n int) text.TextRange {
+	return p.source.NthRange(n)
+}
+
+// NthHasPrecedingLineBreak reports whether the nth non-trivia lookahead token is preceded by a newline.
 func (p *Parser) NthHasPrecedingLineBreak(n int) bool {
 	return p.source.NthHasPrecedingLineBreak(n)
 }
@@ -69,6 +82,11 @@ func (p *Parser) Bump() {
 		End:  end,
 	})
 	p.source.Bump()
+}
+
+// ReLex replaces the current token using a context-specific lexer grammar.
+func (p *Parser) ReLex(context lexer.ReLexContext) {
+	p.source.ReLex(context)
 }
 
 // Eat consumes the current token if it has the given kind.

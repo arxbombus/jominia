@@ -14,6 +14,9 @@ func FuzzParseLossless(f *testing.F) {
 		`type bad_widget = default_block_window = {}`,
 		`[BrokenParen(foo))]`,
 		`@third = @[1/3]`,
+		`value = @[-(@base + |$DELTA|2$|)]`,
+		`[[enabled] value = yes]`,
+		`[[outer] [[inner] value] ]`,
 		`foo =`,
 		`broken = "unterminated`,
 	}

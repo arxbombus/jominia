@@ -227,8 +227,7 @@ func TestLex(t *testing.T) {
 			name:   "brackets",
 			source: `@[1-leo_x]`,
 			want: []expectedToken{
-				{syntax.Identifier, "@"},
-				{syntax.LBracket, "["},
+				{syntax.InlineMathStart, "@["},
 				{syntax.Identifier, "1-leo_x"},
 				{syntax.RBracket, "]"},
 				{syntax.EOF, ""},
@@ -337,6 +336,76 @@ func TestLex(t *testing.T) {
 			assertTokens(t, test.source, test.want)
 		})
 	}
+}
+
+func TestReLexInlineMath(t *testing.T) {
+	const source = `@[1-leo_x*($FACTOR|2$+@foo)%3] next-value`
+	l := NewLexer(source)
+
+	opener := l.Next()
+	if opener.Kind != syntax.InlineMathStart {
+		t.Fatalf("opener kind = %s, want InlineMathStart", opener.Kind)
+	}
+
+	current := l.Next()
+	if current.Kind != syntax.Identifier {
+		t.Fatalf("normal interior kind = %s, want Identifier", current.Kind)
+	}
+	current = l.ReLex(current, ReLexInlineMath)
+
+	got := []Token{opener}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+
+	want := []expectedToken{
+		{syntax.InlineMathStart, "@["},
+		{syntax.Number, "1"},
+		{syntax.Minus, "-"},
+		{syntax.Identifier, "leo_x"},
+		{syntax.Star, "*"},
+		{syntax.LParen, "("},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "FACTOR"},
+		{syntax.Pipe, "|"},
+		{syntax.ParameterArgument, "2"},
+		{syntax.Dollar, "$"},
+		{syntax.Plus, "+"},
+		{syntax.At, "@"},
+		{syntax.Identifier, "foo"},
+		{syntax.RParen, ")"},
+		{syntax.Percent, "%"},
+		{syntax.Number, "3"},
+		{syntax.RBracket, "]"},
+		{syntax.Whitespace, " "},
+		{syntax.Identifier, "next-value"},
+		{syntax.EOF, ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("token count = %d, want %d\n%s", len(got), len(want), formatTokens(source, got))
+	}
+	for index, token := range got {
+		expected := want[index]
+		if token.Kind != expected.kind {
+			t.Fatalf("token %d kind = %s, want %s\n%s", index, token.Kind, expected.kind, formatTokens(source, got))
+		}
+		if text := source[int(token.Range.Start()):int(token.Range.End())]; text != expected.text {
+			t.Fatalf("token %d text = %q, want %q", index, text, expected.text)
+		}
+	}
+}
+
+func TestLexRecognizesEscapedInlineMathStart(t *testing.T) {
+	assertTokens(t, `@\[1]`, []expectedToken{
+		{syntax.InlineMathStart, `@\[`},
+		{syntax.Number, "1"},
+		{syntax.RBracket, "]"},
+		{syntax.EOF, ""},
+	})
 }
 
 func assertTokens(t *testing.T, source string, want []expectedToken) {
