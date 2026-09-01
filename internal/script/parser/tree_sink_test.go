@@ -406,16 +406,32 @@ func TestLosslessTreeSinkPreservesTriviaOnlySource(t *testing.T) {
 
 	root := parseGreenTree(source)
 
-	if root.ChildCount() != 1 {
+	if root.ChildCount() != 2 {
 		t.Fatalf(
-			"root child count = %d, want 1",
+			"root child count = %d, want 2",
 			root.ChildCount(),
 		)
 	}
 
-	eof, ok := root.Child(0).(*tree.GreenToken)
+	statementList, ok := root.Child(0).(*tree.GreenNode)
 	if !ok {
-		t.Fatal("root child is not a token")
+		t.Fatal("first root child is not a node")
+	}
+
+	if got := syntax.FromRaw(statementList.Kind()); got != syntax.StatementList {
+		t.Fatalf("first root child kind = %s, want StatementList", got)
+	}
+
+	if statementList.ChildCount() != 0 {
+		t.Fatalf(
+			"statement list child count = %d, want 0",
+			statementList.ChildCount(),
+		)
+	}
+
+	eof, ok := root.Child(1).(*tree.GreenToken)
+	if !ok {
+		t.Fatal("second root child is not a token")
 	}
 
 	if got := syntax.FromRaw(eof.Kind()); got != syntax.EOF {
@@ -475,14 +491,33 @@ func TestLosslessTreeSinkBuildsRepresentativeTree(t *testing.T) {
 		)
 	}
 
-	entry, ok := root.Child(0).(*tree.GreenNode)
+	statementList, ok := root.Child(0).(*tree.GreenNode)
 	if !ok {
 		t.Fatal("first root child is not a node")
 	}
 
-	if got := syntax.FromRaw(entry.Kind()); got != syntax.Entry {
+	if got := syntax.FromRaw(statementList.Kind()); got != syntax.StatementList {
 		t.Fatalf(
-			"first root child kind = %s, want Entry",
+			"first root child kind = %s, want StatementList",
+			got,
+		)
+	}
+
+	if statementList.ChildCount() != 1 {
+		t.Fatalf(
+			"root statement list child count = %d, want 1",
+			statementList.ChildCount(),
+		)
+	}
+
+	statement, ok := statementList.Child(0).(*tree.GreenNode)
+	if !ok {
+		t.Fatal("first statement list child is not a node")
+	}
+
+	if got := syntax.FromRaw(statement.Kind()); got != syntax.BlockStatement {
+		t.Fatalf(
+			"first statement kind = %s, want BlockStatement",
 			got,
 		)
 	}

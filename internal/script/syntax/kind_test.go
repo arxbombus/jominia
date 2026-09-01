@@ -11,7 +11,7 @@ func TestTombstoneIsZeroValue(t *testing.T) {
 }
 
 func TestSyntaxKindRawRoundTrip(t *testing.T) {
-	kind := Identifier
+	kind := BinaryStatement
 
 	if got := FromRaw(kind.Raw()); got != kind {
 		t.Fatalf("round trip = %d, want %d", got, kind)
@@ -19,20 +19,28 @@ func TestSyntaxKindRawRoundTrip(t *testing.T) {
 }
 
 func TestTriviaKinds(t *testing.T) {
-	if !Whitespace.IsTrivia() {
-		t.Error("Whitespace should be trivia")
+	trivia := []SyntaxKind{
+		Whitespace,
+		Newline,
+		Comment,
 	}
 
-	if !Newline.IsTrivia() {
-		t.Error("Newline should be trivia")
+	for _, kind := range trivia {
+		if !kind.IsTrivia() {
+			t.Errorf("%s should be trivia", kind)
+		}
 	}
 
-	if !Comment.IsTrivia() {
-		t.Error("Comment should be trivia")
+	nonTrivia := []SyntaxKind{
+		Identifier,
+		Equals,
+		StatementList,
 	}
 
-	if Identifier.IsTrivia() {
-		t.Error("Identifier should not be trivia")
+	for _, kind := range nonTrivia {
+		if kind.IsTrivia() {
+			t.Errorf("%s should not be trivia", kind)
+		}
 	}
 }
 
@@ -82,8 +90,6 @@ func TestScalarKinds(t *testing.T) {
 		}
 	}
 
-	// Single-quoted strings are only meaningful inside opaque bracket/paren
-	// groups for now, so the normal grammar must not treat them as scalars.
 	nonScalars := []SyntaxKind{
 		SingleQuotedString,
 		Equals,
@@ -99,13 +105,13 @@ func TestScalarKinds(t *testing.T) {
 	}
 }
 
-func TestBogusKind(t *testing.T) {
-	if !Bogus.IsBogus() {
-		t.Error("Bogus should be bogus")
+func TestBogusKinds(t *testing.T) {
+	if !BogusStatement.IsBogus() {
+		t.Error("BogusStatement should be bogus")
 	}
 
-	if Identifier.IsBogus() {
-		t.Error("Identifier should not be bogus")
+	if BinaryStatement.IsBogus() {
+		t.Error("BinaryStatement should not be bogus")
 	}
 }
 
@@ -118,8 +124,18 @@ func TestSyntaxKindString(t *testing.T) {
 		{LParen, "LParen"},
 		{RParen, "RParen"},
 		{Bang, "Bang"},
+		{Root, "Root"},
+		{StatementList, "StatementList"},
+		{ValueStatement, "ValueStatement"},
+		{BinaryStatement, "BinaryStatement"},
+		{BlockStatement, "BlockStatement"},
+		{BlockHeader, "BlockHeader"},
+		{ScalarList, "ScalarList"},
+		{ValueList, "ValueList"},
+		{Block, "Block"},
 		{BracketGroup, "BracketGroup"},
 		{ParenGroup, "ParenGroup"},
+		{BogusStatement, "BogusStatement"},
 	}
 
 	for _, test := range tests {

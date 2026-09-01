@@ -207,3 +207,27 @@ func TestTokenSourceNegativeLookaheadPanics(t *testing.T) {
 
 	ts.Nth(-1)
 }
+
+func TestTokenSourceLookaheadLineBreaks(t *testing.T) {
+	ts := NewTokenSource("foo bar\n# comment\nbaz qux")
+
+	if ts.NthHasPrecedingLineBreak(0) {
+		t.Fatal("foo should not have a preceding line break")
+	}
+
+	if ts.NthHasPrecedingLineBreak(1) {
+		t.Fatal("bar should not have a preceding line break")
+	}
+
+	if !ts.NthHasPrecedingLineBreak(2) {
+		t.Fatal("baz should have a preceding line break")
+	}
+
+	if ts.NthHasPrecedingLineBreak(3) {
+		t.Fatal("qux should not have a preceding line break")
+	}
+
+	if got := ts.Current(); got != syntax.Identifier {
+		t.Fatalf("lookahead advanced token source to %s", got)
+	}
+}

@@ -1,0 +1,502 @@
+# Jominia syntax exploration test corpus
+#
+# This file is derived from syntax-exploration.md.
+#
+# Goals:
+# - Exercise the generic Jomini lexer/parser across the full known syntax corpus.
+# - Preserve valid examples from the exploration document.
+# - Include deliberately malformed examples where parser recovery is useful.
+# - Keep semantic validity separate from generic syntactic validity.
+#
+# Sections marked BROKEN contain intentionally malformed syntax.
+
+# ============================================================================
+# Scalars
+# ============================================================================
+
+aaa = foo
+bbb = -1
+ccc = 1.000
+ddd = yes
+eee = no
+fff = "foo"
+ggg = 1821.1.1
+
+-1 = aaa
+"1821.1.1" = bbb
+
+@my_var = "ccc"
+
+# Multiple binary statements on one line.
+a = 1 b = 2 c = 3
+
+# Escaped quotes and backslashes.
+hhh = "a\"b"
+iii = "\\"
+mmm = "\\\""
+
+# Multiline quoted scalar.
+ooo = "hello
+     world"
+
+# Imperator-style escape-code-looking contents.
+nnn = "ab <0x15>D ( ID: 691 )<0x15>!"
+
+# Non-alphanumeric identifiers.
+flavor_tur.8 = yes
+dashed-identifier = yes
+province_id = event_target:agenda_province
+@planet_standard_scale = 11
+
+# Very large integer that must not be lossily coerced to float.
+identity = 18446744073709547616
+
+# Quoted and unquoted values are syntactically distinct.
+unit_type_quoted = "western"
+unit_type_unquoted = western
+
+# BROKEN: duplicate operator.
+broken_scalar_1 = = foo
+
+# BROKEN: missing RHS.
+broken_scalar_2 =
+
+# BROKEN: operator with no LHS.
+= broken_scalar_3
+
+
+
+
+# ============================================================================
+# Comments and trivia
+# ============================================================================
+
+my_obj = # this is going to be great
+{ # my_key = prev_value
+    my_key = value # better_value
+    a = "not # a comment"
+} # the end
+
+# Comment between operator and RHS.
+timezone = #boop
+PST
+
+# Dense boundary-free input.
+a_dense = { b = "1" c = d } foo_dense = bar # good
+
+# Even denser boundary-free input.
+a_no_space={b="1"c=d}foo_no_space=bar#good
+
+
+# ============================================================================
+# Blocks / positional values / binary statements
+# ============================================================================
+
+flags = {
+    schools_initiated = 1444.11.11
+    mol_polish_march = 1444.12.4
+}
+
+players_countries = {
+    "Player"
+    "ENG"
+}
+
+campaign_stats = {
+    {
+        id = 0
+        comparison = 1
+        key = "game_country"
+        selector = "ENG"
+        localization = "England"
+    }
+    {
+        id = 1
+        comparison = 2
+        key = "longest_reign"
+        localization = "Henry VI"
+    }
+}
+
+# Shorthand block without operator.
+foo {
+    bar = qux
+}
+
+# Empty block.
+discovered_by = {}
+
+# Empty blocks mixed with a dated keyed block.
+history = {
+    {}
+    {}
+    1629.11.10 = {
+        core = AAA
+    }
+}
+
+# Mixed keyed and positional block.
+brittany_area = { #5
+    color = { 118 99 151 }
+    169 170 171 172 4384
+}
+
+# Positional value followed by binary statements.
+levels = {
+    10
+    0 = 2
+    1 = 2
+}
+
+# Alternating positional values and keyed block statements.
+on_actions = {
+    faith_holy_order_land_acquisition_pulse
+    delay = {
+        days = { 5 10 }
+    }
+
+    faith_heresy_events_pulse
+    delay = {
+        days = { 15 20 }
+    }
+
+    faith_fervor_events_pulse
+}
+
+# Stellaris bare value.
+has_overlord_dlc = {
+    optimize_memory
+    host_has_dlc = "Overlord"
+}
+
+# BROKEN: extra operator before block.
+broken_block_1 = {
+    type add_wargoal_panel = default_block_window = {}
+}
+
+# BROKEN: doubled operator.
+broken_block_2 = = {}
+
+# BROKEN: missing closing brace.
+broken_block_3 = {
+    foo = bar
+
+# BROKEN: stray closing brace.
+}
+broken_after_stray_brace = yes
+
+
+# ============================================================================
+# Operators
+# ============================================================================
+
+intrigue >= high_skill_rating
+age > 16
+count < 2
+scope:attacker.primary_title.tier <= tier_county
+operator_a != operator_b
+start_date == 1066.9.15
+c:RUS ?= this
+
+# BROKEN: split operator.
+broken_operator_1 > = 16
+
+# BROKEN: repeated operator.
+broken_operator_2 != = this
+
+
+# ============================================================================
+# Tagged / externally prefixed blocks
+# ============================================================================
+
+color_rgb = rgb { 100 200 150 }
+color_hsv = hsv { 0.43 0.86 0.61 }
+color_hsv360 = hsv360 { 25 75 63 }
+color_hex = hex { aabbccdd }
+mild_winter = LIST { 3700 3701 }
+
+# Same syntax with no whitespace before block.
+color_rgb_dense = rgb{ 100 200 150 }
+color_hsv360_dense = hsv360{ 25 75 63 }
+
+# BROKEN: second operator in a block header.
+broken_tagged = rgb = { 100 200 150 }
+
+
+# ============================================================================
+# Unmarked / unbraced RHS value lists
+# ============================================================================
+
+simple_cross_flag = {
+    pattern = list "christian_emblems_list"
+    color1 = list "normal_colors"
+}
+
+# More obvious same-line multi-value RHS.
+governor = 1 "Gavin Newsom"
+
+# One-value binary statement followed by another binary statement on same line.
+foo_sequence = red bar_sequence = blue
+
+# BROKEN semantically for many contexts, but syntactically useful:
+# parser should still preserve this as a multi-value RHS.
+syntactically_multi_value = one two three four
+
+
+# ============================================================================
+# CK3 scripted effects / parameter-like identifiers
+# ============================================================================
+
+give_gold = {
+    $GIVER$ = {
+        save_scope_as = giver
+    }
+
+    $TAKER$ = {
+        save_scope_as = taker
+    }
+
+    save_scope_value_as = {
+        name = gold_amount
+        value = $VALUE$
+    }
+
+    scope:giver = {
+        remove_short_term_gold = scope:gold_amount
+
+        scope:taker = {
+            add_gold = scope:gold_amount
+        }
+    }
+
+    clear_saved_scope = giver
+    clear_saved_scope = taker
+}
+
+
+# ============================================================================
+# Vic3 scripted parameters
+# ============================================================================
+
+transfer_state = {
+    if = {
+        limit = {
+            exists = $GIVER$
+            exists = $TAKER$
+            $TAKER$ != $GIVER$
+
+            $STATE$ = {
+                any_scope_state = {
+                    $GIVER$ = owner
+                }
+            }
+        }
+
+        $STATE$ = {
+            every_scope_state = {
+                limit = {
+                    owner = $GIVER$
+                }
+
+                set_state_owner = $TAKER$
+            }
+        }
+    }
+}
+
+transfer_state = {
+    STATE = s:STATE_MONTENEGRO
+    GIVER = c:TUR
+    TAKER = root
+}
+
+
+# ============================================================================
+# Semicolons
+# ============================================================================
+
+textureFile3 = "gfx//mapitems//trade_terrain.dds";
+
+# Multiple statements with semicolons.
+semi_a = foo;
+semi_b = "bar";
+semi_c = { 1 2 3 };
+
+
+# ============================================================================
+# Vic3 GUI macro definitions
+# ============================================================================
+
+macro = {
+    description = "Add a loc key with a trailing newline if a condition is satisfied"
+    definition = "MakeLineIf(Condition, LocKey)"
+    replace_with = "ConcatIfNeitherEmpty(AddLocalizationIf(Condition, LocKey), Localize( 'NEWLINE' ))"
+}
+
+
+# ============================================================================
+# Bracket / parenthesis groups
+#
+# These remain opaque for now. They are included so the current parser can
+# prove losslessness and nested delimiter handling without implementing the
+# later expression grammar.
+# ============================================================================
+
+[MakeLineIf( IsZero(State.GetTradeCapacity), 'NO_WORLD_MARKET_ACCESS_DUE_TO_NO_TRADE_CAPACITY')]
+
+[ConcatIfNeitherEmpty(AddLocalizationIf( IsZero(State.GetTradeCapacity), 'NO_WORLD_MARKET_ACCESS_DUE_TO_NO_TRADE_CAPACITY'), Localize( 'NEWLINE' ))]
+
+# Nested calls / parentheses.
+[Outer(Inner(One), Another(Two, Three))]
+
+
+# ============================================================================
+# @ values / interpolated-expression forms
+#
+# @[ ... ] expression syntax is intentionally NOT implemented yet.
+# These cases should remain lossless and are useful for observing current CST
+# behavior before the later expression lexer/parser pass.
+# ============================================================================
+
+@pi = 3.1416
+@third = @[1/3]
+@sub_YUC_hoist_scale = @[third*2]
+@canton_scale_cross_x = @[ ( 333 / 768 ) + 0.001 ]
+@birthrate_at_growth_max = @[(pop_growth_max_sol-pop_growth_transition_sol)*((min_birthrate-birthrate_at_transition)/(pop_growth_stable_sol-pop_growth_transition_sol))+birthrate_at_transition]
+@this_is_you = "this_is_you.dds"
+@default_window_file = "gui/notifications/jomini_message.gui"
+@default_window_name = "jomini_message"
+@tex_star_position = @sixth
+
+position_x = @[1-leo_x]
+
+
+
+
+# ============================================================================
+# Vic3 GUI block headers
+# ============================================================================
+
+types wargoal_types
+{
+    type add_wargoal_panel = default_block_window {
+        name = "add_wargoal_panel"
+        datacontext = "[AddWarGoalPanel.AccessDiplomaticPlay]"
+
+        blockoverride "window_header_name" {
+            text = "ADD_WARGOAL_HEADER"
+        }
+
+        blockoverride "entire_back_button" {
+            back_button_large = {
+                position = { 8 30 }
+                onclick = "[AddWarGoalPanel.ClearSelectedWarGoalType]"
+                input_action = "back"
+                visible = "[AddWarGoalPanel.HasSelectedWarGoalType]"
+            }
+
+            back_button_large = {
+                position = { 8 30 }
+                onclick = "[InformationPanelBar.OpenPreviousPanel]"
+                input_action = "back"
+                visible = "[Not(AddWarGoalPanel.HasSelectedWarGoalType)]"
+            }
+        }
+    }
+}
+
+# Minimal block-header variants.
+types minimal_types
+{
+}
+
+blockoverride "minimal_override" {
+}
+
+type minimal_widget = default_block_window {
+}
+
+# BROKEN: second operator in otherwise obvious block header.
+type broken_widget = default_block_window = {
+}
+
+# BROKEN: missing block after otherwise obvious header.
+type missing_widget = default_block_window
+
+# Adjacent bare statement then valid block statement.
+optimize_memory
+foo_after_bare {}
+
+
+# ============================================================================
+# EU4 [[parameter] ... ] syntax
+#
+# Intentionally deferred. These examples should remain in the corpus so we can
+# compare CST behavior before and after implementing the dedicated grammar.
+# ============================================================================
+
+generate_advisor = {
+    [[scaled_skill]
+        $scaled_skill$
+    ]
+
+    [[!skill] if = {} ]
+}
+
+# BROKEN parameter forms for future recovery work.
+broken_parameter_container = {
+    [[scaled_skill
+        $scaled_skill$
+    ]
+}
+
+broken_parameter_container_2 = {
+    [[!skill] if = {} 
+}
+
+
+# ============================================================================
+# Additional recovery stress
+# ============================================================================
+
+recovery_container = {
+    good_before = yes
+
+    # BROKEN: repeated operator.
+    bad_1 = = foo
+
+    good_after_1 = yes
+
+    # BROKEN: malformed block header with two operators.
+    type bad_widget = default_block_window = {}
+
+    good_after_2 = yes
+
+    # BROKEN: operator-only statement.
+    =
+
+    good_after_3 = yes
+}
+
+# Root-level malformed material between valid statements.
+root_good_1 = yes
+= =
+root_good_2 = yes
+
+# Final valid statement so recovery can demonstrate forward progress.
+final_statement = yes
+
+# BROKEN: mismatched / missing closing delimiters.
+[BrokenCall( Inner(foo), bar
+
+# BROKEN: stray closing parenthesis inside opaque group.
+][BrokenParen(foo))]
+
+# BROKEN: missing closing bracket.
+@broken_expression = @[1/3
+
+# BROKEN: extra closing bracket.
+@broken_expression_2 = @[1/3]]
+
+# BROKEN: unterminated string.
+broken_scalar_4 = "unterminated

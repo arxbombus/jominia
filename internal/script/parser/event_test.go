@@ -61,7 +61,7 @@ func TestProcessEventsDispatchesEvents(t *testing.T) {
 		},
 		{
 			Type: EventStart,
-			Kind: syntax.Entry,
+			Kind: syntax.BinaryStatement,
 		},
 		{
 			Type: EventToken,
@@ -96,7 +96,7 @@ func TestProcessEventsDispatchesEvents(t *testing.T) {
 		},
 		{
 			eventType: EventStart,
-			kind:      syntax.Entry,
+			kind:      syntax.BinaryStatement,
 		},
 		{
 			eventType: EventToken,

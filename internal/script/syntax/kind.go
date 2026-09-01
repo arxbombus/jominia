@@ -43,13 +43,19 @@ const (
 
 	// Syntax nodes.
 	Root
-	Entry
+	StatementList
+	ValueStatement
+	BinaryStatement
+	BlockStatement
+	BlockHeader
+	ScalarList
+	ValueList
 	Block
 	BracketGroup
 	ParenGroup
 
 	// Error-recovery nodes.
-	Bogus
+	BogusStatement
 )
 
 func (k SyntaxKind) Raw() tree.RawSyntaxKind {
@@ -65,7 +71,7 @@ func (k SyntaxKind) IsTrivia() bool {
 }
 
 func (k SyntaxKind) IsBogus() bool {
-	return k == Bogus
+	return k == BogusStatement
 }
 
 // IsOperator reports whether k is an operator.
@@ -82,7 +88,6 @@ func (k SyntaxKind) IsOperator() bool {
 
 // IsScalar reports whether k is a scalar accepted by the normal grammar.
 // Single-quoted strings are currently only recognized inside opaque groups.
-// valid in gui / loc (inside bracket and paren group): [MakeLineIf( IsZero(State.GetTradeCapacity), 'NO_WORLD_MARKET_ACCESS_DUE_TO_NO_TRADE_CAPACITY')]
 func (k SyntaxKind) IsScalar() bool {
 	return k == Identifier ||
 		k == Number ||
@@ -152,16 +157,28 @@ func (k SyntaxKind) String() string {
 		return "Comma"
 	case Root:
 		return "Root"
-	case Entry:
-		return "Entry"
+	case StatementList:
+		return "StatementList"
+	case ValueStatement:
+		return "ValueStatement"
+	case BinaryStatement:
+		return "BinaryStatement"
+	case BlockStatement:
+		return "BlockStatement"
+	case BlockHeader:
+		return "BlockHeader"
+	case ScalarList:
+		return "ScalarList"
+	case ValueList:
+		return "ValueList"
 	case Block:
 		return "Block"
 	case BracketGroup:
 		return "BracketGroup"
 	case ParenGroup:
 		return "ParenGroup"
-	case Bogus:
-		return "Bogus"
+	case BogusStatement:
+		return "BogusStatement"
 	default:
 		return "Unknown"
 	}

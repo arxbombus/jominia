@@ -15,7 +15,7 @@ func TestMarkerCompleteCreatesNodeEvents(t *testing.T) {
 	p.Bump()
 	p.Bump()
 
-	m.Complete(p, syntax.Entry)
+	m.Complete(p, syntax.BinaryStatement)
 
 	events := p.Events()
 
@@ -27,8 +27,11 @@ func TestMarkerCompleteCreatesNodeEvents(t *testing.T) {
 		t.Errorf("expected first event to be EventStart")
 	}
 
-	if events[0].Kind != syntax.Entry {
-		t.Errorf("expected first event kind to be Entry, got %s", events[0].Kind)
+	if events[0].Kind != syntax.BinaryStatement {
+		t.Errorf(
+			"expected first event kind to be BinaryStatement, got %s",
+			events[0].Kind,
+		)
 	}
 
 	if events[1].Type != EventToken || events[1].Kind != syntax.Identifier {
@@ -69,7 +72,7 @@ func TestMarkerCompleteCreatesNestedNodeEvents(t *testing.T) {
 	p.Bump() // =
 	p.Bump() // 76
 
-	id.Complete(p, syntax.Entry)
+	id.Complete(p, syntax.BinaryStatement)
 
 	subsistenceBuilding := p.Start()
 
@@ -77,12 +80,12 @@ func TestMarkerCompleteCreatesNestedNodeEvents(t *testing.T) {
 	p.Bump() // =
 	p.Bump() // "building_subsistence_farm"
 
-	subsistenceBuilding.Complete(p, syntax.Entry)
+	subsistenceBuilding.Complete(p, syntax.BinaryStatement)
 
 	p.Bump() // }
 
 	block.Complete(p, syntax.Block)
-	state.Complete(p, syntax.Entry)
+	state.Complete(p, syntax.BlockStatement)
 
 	events := p.Events()
 
@@ -94,20 +97,20 @@ func TestMarkerCompleteCreatesNestedNodeEvents(t *testing.T) {
 		eventType EventType
 		kind      syntax.SyntaxKind
 	}{
-		{EventStart, syntax.Entry},
+		{EventStart, syntax.BlockStatement},
 		{EventToken, syntax.Identifier},
 		{EventToken, syntax.Equals},
 
 		{EventStart, syntax.Block},
 		{EventToken, syntax.LCurly},
 
-		{EventStart, syntax.Entry},
+		{EventStart, syntax.BinaryStatement},
 		{EventToken, syntax.Identifier},
 		{EventToken, syntax.Equals},
 		{EventToken, syntax.Number},
 		{EventFinish, 0},
 
-		{EventStart, syntax.Entry},
+		{EventStart, syntax.BinaryStatement},
 		{EventToken, syntax.Identifier},
 		{EventToken, syntax.Equals},
 		{EventToken, syntax.String},

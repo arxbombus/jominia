@@ -13,6 +13,11 @@ type Trivia struct {
 	IsTrailing bool
 }
 
+type tokenLookahead struct {
+	kind                  syntax.SyntaxKind
+	hasPrecedingLineBreak bool
+}
+
 // TokenSource exposes non-trivia lexer tokens to the parser while retaining trivia.
 type TokenSource struct {
 	source string
@@ -48,27 +53,14 @@ func (ts *TokenSource) Text() string {
 	return ts.source
 }
 
-// Nth returns the kind of the nth non-trivia token without consuming it.
-// Nth(0) is equivalent to Current.
+// Nth returns the kind of the nth non-trivia token without consuming it. Nth(0) is equivalent to Current.
 func (ts *TokenSource) Nth(n int) syntax.SyntaxKind {
-	if n < 0 {
-		panic("token source: lookahead index must be non-negative")
-	}
-	if n == 0 {
-		return ts.current.Kind
-	}
-	lexer := *ts.lexer
-	nonTriviaIndex := 0
-	for {
-		token := lexer.Next()
-		if token.Kind.IsTrivia() {
-			continue
-		}
-		nonTriviaIndex++
-		if nonTriviaIndex == n || token.Kind == syntax.EOF {
-			return token.Kind
-		}
-	}
+	return ts.nth(n).kind
+}
+
+// NthHasPrecedingLineBreak reports whether the nth non-trivia lookahead token is preceded by a newline. NthHasPrecedingLineBreak(0) is equivalent to HasPrecedingLineBreak.
+func (ts *TokenSource) NthHasPrecedingLineBreak(n int) bool {
+	return ts.nth(n).hasPrecedingLineBreak
 }
 
 // HasPrecedingLineBreak reports whether the current token is preceded by a newline.
@@ -91,8 +83,33 @@ func (ts *TokenSource) Finish() []Trivia {
 	return ts.trivia
 }
 
-// nextNonTriviaToken advances until it finds a non-trivia token and records any
-// trivia skipped along the way.
+func (ts *TokenSource) nth(n int) tokenLookahead {
+	if n < 0 {
+		panic("token source: lookahead index must be non-negative")
+	}
+	if n == 0 {
+		return tokenLookahead{kind: ts.current.Kind, hasPrecedingLineBreak: ts.hasPrecedingLineBreak}
+	}
+	lookaheadLexer := *ts.lexer
+	index := 1
+	hasPrecedingLineBreak := false
+	for {
+		token := lookaheadLexer.Next()
+		if token.Kind.IsTrivia() {
+			if token.Kind == syntax.Newline {
+				hasPrecedingLineBreak = true
+			}
+			continue
+		}
+		if index == n || token.Kind == syntax.EOF {
+			return tokenLookahead{kind: token.Kind, hasPrecedingLineBreak: hasPrecedingLineBreak}
+		}
+		index++
+		hasPrecedingLineBreak = false
+	}
+}
+
+// nextNonTriviaToken advances until it finds a non-trivia token and records any trivia skipped along the way.
 func (ts *TokenSource) nextNonTriviaToken(isFirstToken bool) {
 	isTrailing := !isFirstToken
 	ts.hasPrecedingLineBreak = false

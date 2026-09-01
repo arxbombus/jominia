@@ -26,6 +26,12 @@ func (p *Parser) Nth(n int) syntax.SyntaxKind {
 	return p.source.Nth(n)
 }
 
+// NthHasPrecedingLineBreak reports whether the nth non-trivia lookahead token
+// is preceded by a newline.
+func (p *Parser) NthHasPrecedingLineBreak(n int) bool {
+	return p.source.NthHasPrecedingLineBreak(n)
+}
+
 // At reports whether the current token has the given kind.
 func (p *Parser) At(kind syntax.SyntaxKind) bool {
 	return p.Current() == kind
