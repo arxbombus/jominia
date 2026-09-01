@@ -100,8 +100,11 @@ func (l *Lexer) Next() Token {
 	default:
 		l.scanAtom()
 		kind := syntax.Identifier
-
-		if _, err := strconv.ParseFloat(l.source[start:l.position], 64); err == nil {
+		value := l.source[start:l.position]
+		if value == "yes" || value == "no" {
+			kind = syntax.Boolean
+		}
+		if _, err := strconv.ParseFloat(value, 64); err == nil {
 			kind = syntax.Number
 		}
 		return l.token(kind, start)

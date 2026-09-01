@@ -73,6 +73,7 @@ func TestScalarKinds(t *testing.T) {
 		Identifier,
 		Number,
 		String,
+		Boolean,
 	}
 
 	for _, kind := range scalars {

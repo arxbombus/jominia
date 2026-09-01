@@ -206,6 +206,24 @@ func TestLex(t *testing.T) {
 			},
 		},
 		{
+			name:   "boolean",
+			source: "do_something = yes\nenabled = no",
+			want: []expectedToken{
+				{syntax.Identifier, "do_something"},
+				{syntax.Whitespace, " "},
+				{syntax.Equals, "="},
+				{syntax.Whitespace, " "},
+				{syntax.Boolean, "yes"},
+				{syntax.Newline, "\n"},
+				{syntax.Identifier, "enabled"},
+				{syntax.Whitespace, " "},
+				{syntax.Equals, "="},
+				{syntax.Whitespace, " "},
+				{syntax.Boolean, "no"},
+				{syntax.EOF, ""},
+			},
+		},
+		{
 			name:   "brackets",
 			source: `@[1-leo_x]`,
 			want: []expectedToken{

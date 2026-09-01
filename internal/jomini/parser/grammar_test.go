@@ -322,7 +322,7 @@ func TestGrammarParsesBareBlockScalarsAsSeparateEntries(t *testing.T) {
 		{eventType: EventStart, kind: syntax.Entry},
 		{eventType: EventToken, kind: syntax.Identifier},
 		{eventType: EventToken, kind: syntax.Equals},
-		{eventType: EventToken, kind: syntax.Identifier},
+		{eventType: EventToken, kind: syntax.Boolean},
 		{eventType: EventFinish},
 
 		{eventType: EventToken, kind: syntax.RCurly},

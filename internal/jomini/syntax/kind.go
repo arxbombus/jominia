@@ -19,6 +19,7 @@ const (
 	Number
 	String
 	SingleQuotedString
+	Boolean
 
 	// Punctuation and operators.
 	LCurly
@@ -85,7 +86,8 @@ func (k SyntaxKind) IsOperator() bool {
 func (k SyntaxKind) IsScalar() bool {
 	return k == Identifier ||
 		k == Number ||
-		k == String
+		k == String ||
+		k == Boolean
 }
 
 func (k SyntaxKind) String() string {
@@ -110,6 +112,8 @@ func (k SyntaxKind) String() string {
 		return "String"
 	case SingleQuotedString:
 		return "SingleQuotedString"
+	case Boolean:
+		return "Boolean"
 	case LCurly:
 		return "LCurly"
 	case RCurly:
