@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"github.com/arxbombus/jominia/internal/jomini/syntax"
+	"github.com/arxbombus/jominia/internal/script/syntax"
 	"github.com/arxbombus/jominia/internal/text"
 )
 

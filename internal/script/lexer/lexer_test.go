@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/arxbombus/jominia/internal/jomini/syntax"
+	"github.com/arxbombus/jominia/internal/script/syntax"
 )
 
 type expectedToken struct {

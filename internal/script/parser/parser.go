@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/arxbombus/jominia/internal/jomini/syntax"
+import "github.com/arxbombus/jominia/internal/script/syntax"
 
 // Parser consumes tokens and records syntax events.
 type Parser struct {

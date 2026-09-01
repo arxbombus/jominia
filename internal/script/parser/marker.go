@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/arxbombus/jominia/internal/jomini/syntax"
+import "github.com/arxbombus/jominia/internal/script/syntax"
 
 type Marker struct {
 	position int

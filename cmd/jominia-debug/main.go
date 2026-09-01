@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/arxbombus/jominia/internal/jomini/parser"
-	"github.com/arxbombus/jominia/internal/jomini/syntax"
+	"github.com/arxbombus/jominia/internal/script/parser"
+	"github.com/arxbombus/jominia/internal/script/syntax"
 	"github.com/arxbombus/jominia/internal/tree"
 )
 
