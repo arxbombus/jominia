@@ -244,7 +244,7 @@ syntactically_multi_value = one two three four
 
 
 # ============================================================================
-# CK3 scripted effects / parameter-like identifiers
+# CK3 scripted effects / generic parameters
 # ============================================================================
 
 give_gold = {
@@ -272,6 +272,27 @@ give_gold = {
     clear_saved_scope = giver
     clear_saved_scope = taker
 }
+
+# Defaulted parameters keep the default as structured parameter content.
+parameter_default_value = $VALUE|100$
+
+# Parameters are logical scalars in multi-value lists and block headers.
+parameter_value_list = $FIRST$ $SECOND|fallback$
+$STATE|root$ = { owner = $OWNER|root$ }
+type $WIDGET$ = $BASE|default_block_window$ {}
+
+# Stellaris and inline-script parameters can expand inside both unquoted and
+# quoted scalars. The quoted inline-math example remains string content here;
+# only its parameter substitution receives nested structure.
+parameterized_$TYPE$_key = value
+$PREFIX$_suffix = value
+quoted_parameter_text = "prefix_$TYPE$_suffix"
+shift_ethic = ethic_$ETHIC$
+has_global_flag = crisis_stage_$STAGE|1$
+$KEY$_policy = {
+    name = "$KEY$_a"
+}
+quoted_inline_math = "@\[ $COUNT$ * 500]"
 
 
 # ============================================================================
@@ -351,11 +372,10 @@ macro = {
 
 
 # ============================================================================
-# @ values / interpolated-expression forms
+# @ values / inline-math expressions
 #
-# @[ ... ] expression syntax is intentionally NOT implemented yet.
-# These cases should remain lossless and are useful for observing current CST
-# behavior before the later expression lexer/parser pass.
+# @[ ... ] and @\[ ... ] use the contextual inline-math lexer and expression
+# parser. Parameters inside them share the generic parameter parser.
 # ============================================================================
 
 @pi = 3.1416
@@ -367,6 +387,17 @@ macro = {
 @default_window_file = "gui/notifications/jomini_message.gui"
 @default_window_name = "jomini_message"
 @tex_star_position = @sixth
+@parameter_math = @[$FACTOR|2$*3]
+@escaped_math = @\[1+2]
+
+# Leading @ variables receive shared structure in definitions, values, and
+# inline math. Embedded dynamic-flag suffixes and pipe-delimited script-value
+# calls remain ordinary atoms because their interpretation is context-specific.
+@example = 2
+variable_value = @example
+variable_math = @[1+@example]
+dynamic_flag = is_friend_of_@root
+script_value_call = value:my_value|PARAM1|value1|PARAM2|value2|
 
 position_x = @[1-leo_x]
 
@@ -429,7 +460,7 @@ foo_after_bare {}
 
 
 # ============================================================================
-# EU4 [[parameter] ... ] syntax
+# EU4 conditional-block syntax
 # ============================================================================
 
 generate_advisor = {
@@ -440,7 +471,11 @@ generate_advisor = {
     [[!skill] if = {} ]
 }
 
-# BROKEN parameter forms for future recovery work.
+# Stellaris spelling with no whitespace between the header and body.
+[[homeworld]set_species_homeworld = event_target:tempHomeworld]
+[[!homeworld]fallback_homeworld = yes]
+
+# BROKEN conditional-block forms retained for recovery coverage.
 broken_parameter_container = {
     [[scaled_skill
         $scaled_skill$
@@ -455,6 +490,34 @@ broken_parameter_container_2 = {
 # ============================================================================
 # Additional recovery stress
 # ============================================================================
+
+# BROKEN: malformed standalone parameter forms. Each one is followed by a
+# valid sentinel so a parameter lexer state cannot swallow later tests.
+parameter_broken_1 = $
+parameter_recovery_1 = yes
+
+parameter_broken_2 = $NAME
+parameter_recovery_2 = yes
+
+parameter_broken_3 = $$
+parameter_recovery_3 = yes
+
+parameter_broken_4 = $|default$
+parameter_recovery_4 = yes
+
+parameter_broken_5 = $NAME|$
+parameter_recovery_5 = yes
+
+parameter_broken_6 = $NAME|default
+parameter_recovery_6 = yes
+
+# BROKEN: malformed interpolation remains bounded by its containing atom or
+# quoted string and cannot consume the following sentinel statement.
+interpolation_broken_1 = prefix_$NAME
+interpolation_recovery_1 = yes
+
+interpolation_broken_2 = "prefix_$NAME"
+interpolation_recovery_2 = yes
 
 recovery_container = {
     good_before = yes
@@ -495,5 +558,6 @@ final_statement = yes
 # BROKEN: extra closing bracket.
 @broken_expression_2 = @[1/3]]
 
-# BROKEN: unterminated string.
+# BROKEN: unterminated string. Keep this final: quoted-string lexing consumes
+# through EOF when no closing quote exists, so no independent case can follow.
 broken_scalar_4 = "unterminated

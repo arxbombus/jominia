@@ -9,20 +9,26 @@ import (
 
 // Lexer tokenizes source text.
 type Lexer struct {
-	source     string
-	position   text.TextSize
-	sourceSize text.TextSize
-	mode       lexMode
+	source              string
+	position            text.TextSize
+	sourceSize          text.TextSize
+	mode                lexMode
+	parameterReturnMode lexMode
+	reLexEnd            text.TextSize
 }
 
 // ReLexContext selects a contextual grammar for the current token.
 //
-// The normal lexer deliberately keeps punctuation such as hyphens and slashes inside atoms. Inline math assigns those same bytes expression meanings, so the parser requests a contextual re-lex after seeing `@[` (or its escaped spelling, `@\[`).
+// The normal lexer deliberately keeps punctuation such as hyphens, slashes, and dollar signs inside atoms. Nested grammars assign those same bytes more specific meanings, so the parser requests contextual re-lexing only after it has recognized the surrounding syntax.
 type ReLexContext uint8
 
 const (
 	ReLexNormal ReLexContext = iota
 	ReLexInlineMath
+	ReLexParameter
+	ReLexInterpolatedIdentifier
+	ReLexInterpolatedString
+	ReLexVariableReference
 )
 
 type lexMode uint8
@@ -30,9 +36,12 @@ type lexMode uint8
 const (
 	lexNormal lexMode = iota
 	lexInlineMath
-	lexInlineMathParameterName
-	lexInlineMathParameterArgument
-	lexInlineMathParameterArgumentEnd
+	lexParameterName
+	lexParameterArgument
+	lexParameterArgumentEnd
+	lexInterpolatedIdentifier
+	lexInterpolatedString
+	lexVariableReference
 )
 
 // NewLexer returns a Lexer positioned at the start of source.
@@ -50,12 +59,18 @@ func (l *Lexer) Next() Token {
 		return l.nextNormal()
 	case lexInlineMath:
 		return l.nextInlineMath()
-	case lexInlineMathParameterName:
-		return l.nextInlineMathParameterName()
-	case lexInlineMathParameterArgument:
-		return l.nextInlineMathParameterArgument()
-	case lexInlineMathParameterArgumentEnd:
-		return l.nextInlineMathParameterArgumentEnd()
+	case lexParameterName:
+		return l.nextParameterName()
+	case lexParameterArgument:
+		return l.nextParameterArgument()
+	case lexParameterArgumentEnd:
+		return l.nextParameterArgumentEnd()
+	case lexInterpolatedIdentifier:
+		return l.nextInterpolatedIdentifier()
+	case lexInterpolatedString:
+		return l.nextInterpolatedString()
+	case lexVariableReference:
+		return l.nextVariableReference()
 	default:
 		panic("lexer: unknown lex mode")
 	}
@@ -66,27 +81,49 @@ func (l *Lexer) ReLex(current Token, context ReLexContext) Token {
 	if current.Range.End() != l.position {
 		panic("lexer: can only re-lex the current token")
 	}
-
-	l.position = current.Range.Start()
+	start := current.Range.Start()
+	l.position = start
 	switch context {
 	case ReLexNormal:
 		l.mode = lexNormal
 	case ReLexInlineMath:
 		l.mode = lexInlineMath
+	case ReLexParameter:
+		if l.position >= l.sourceSize || l.source[l.position] != '$' {
+			panic("lexer: parameter re-lex must start at a dollar sign")
+		}
+		return l.startParameter(start, lexNormal)
+	case ReLexInterpolatedIdentifier:
+		if current.Kind != syntax.Identifier {
+			panic("lexer: interpolated identifier re-lex requires an identifier")
+		}
+		l.reLexEnd = current.Range.End()
+		l.mode = lexInterpolatedIdentifier
+	case ReLexInterpolatedString:
+		if current.Kind != syntax.String || l.position >= l.sourceSize || l.source[l.position] != '"' {
+			panic("lexer: interpolated string re-lex requires a double-quoted string")
+		}
+		l.reLexEnd = current.Range.End()
+		l.mode = lexInterpolatedString
+	case ReLexVariableReference:
+		if current.Kind != syntax.Identifier || l.position >= l.sourceSize || l.source[l.position] != '@' {
+			panic("lexer: variable re-lex requires an at-prefixed identifier")
+		}
+		l.reLexEnd = current.Range.End()
+		l.position++
+		l.mode = lexVariableReference
+		return l.token(syntax.At, start)
 	default:
 		panic("lexer: unknown re-lex context")
 	}
-
 	return l.Next()
 }
 
 func (l *Lexer) nextNormal() Token {
 	start := l.position
-
 	if l.position >= l.sourceSize {
 		return l.token(syntax.EOF, start)
 	}
-
 	switch l.source[l.position] {
 	case ' ', '\t':
 		l.scanWhitespace()
@@ -171,7 +208,6 @@ func (l *Lexer) nextInlineMath() Token {
 	if l.position >= l.sourceSize {
 		return l.token(syntax.EOF, start)
 	}
-
 	switch l.source[l.position] {
 	case ' ', '\t':
 		l.scanWhitespace()
@@ -211,9 +247,7 @@ func (l *Lexer) nextInlineMath() Token {
 		l.position++
 		return l.token(syntax.Pipe, start)
 	case '$':
-		l.position++
-		l.mode = lexInlineMathParameterName
-		return l.token(syntax.Dollar, start)
+		return l.startParameter(start, lexInlineMath)
 	case '@':
 		l.position++
 		return l.token(syntax.At, start)
@@ -271,102 +305,168 @@ func (l *Lexer) nextInlineMath() Token {
 	}
 }
 
-func (l *Lexer) nextInlineMathParameterName() Token {
+func (l *Lexer) nextParameterName() Token {
 	start := l.position
+	if l.atParameterContextEnd() {
+		return l.nextAfterParameter()
+	}
 	if l.position >= l.sourceSize {
 		return l.token(syntax.EOF, start)
 	}
-
 	switch l.source[l.position] {
 	case '$':
-		l.position++
-		l.mode = lexInlineMath
-		return l.token(syntax.Dollar, start)
+		return l.finishParameter(start)
 	case '|':
 		l.position++
-		l.mode = lexInlineMathParameterArgument
+		l.mode = lexParameterArgument
 		return l.token(syntax.Pipe, start)
-	case ']':
-		l.position++
-		l.mode = lexNormal
-		return l.token(syntax.RBracket, start)
-	case ' ', '\t':
-		l.scanWhitespace()
-		return l.token(syntax.Whitespace, start)
-	case '\n', '\r':
-		l.scanNewline()
-		return l.token(syntax.Newline, start)
 	default:
 		if isParameterNameByte(l.source[l.position]) {
 			l.scanParameterName()
 			return l.token(syntax.ParameterName, start)
 		}
-		// Return to expression lexing for malformed parameters so recovery
-		// still sees operators and delimiters with their normal math meaning.
-		l.mode = lexInlineMath
-		return l.nextInlineMath()
+		// Return to the enclosing grammar for malformed parameters so recovery still sees operators, delimiters, whitespace, and line breaks with their normal meaning.
+		return l.nextAfterParameter()
 	}
 }
 
-func (l *Lexer) nextInlineMathParameterArgument() Token {
+func (l *Lexer) nextParameterArgument() Token {
 	start := l.position
+	if l.atParameterContextEnd() {
+		return l.nextAfterParameter()
+	}
 	if l.position >= l.sourceSize {
 		return l.token(syntax.EOF, start)
 	}
-
 	switch l.source[l.position] {
 	case '$':
-		l.position++
-		l.mode = lexInlineMath
-		return l.token(syntax.Dollar, start)
-	case ']':
-		l.position++
-		l.mode = lexNormal
-		return l.token(syntax.RBracket, start)
-	case ' ', '\t':
-		l.scanWhitespace()
-		return l.token(syntax.Whitespace, start)
-	case '\n', '\r':
-		l.scanNewline()
-		return l.token(syntax.Newline, start)
+		return l.finishParameter(start)
 	default:
+		if l.isParameterArgumentBoundary(l.source[l.position]) {
+			return l.nextAfterParameter()
+		}
 		l.scanParameterArgument()
-		l.mode = lexInlineMathParameterArgumentEnd
+		l.mode = lexParameterArgumentEnd
 		return l.token(syntax.ParameterArgument, start)
 	}
 }
 
-func (l *Lexer) nextInlineMathParameterArgumentEnd() Token {
+func (l *Lexer) nextParameterArgumentEnd() Token {
 	start := l.position
+	if l.atParameterContextEnd() {
+		return l.nextAfterParameter()
+	}
 	if l.position >= l.sourceSize {
 		return l.token(syntax.EOF, start)
 	}
-
 	switch l.source[l.position] {
 	case '$':
-		l.position++
-		l.mode = lexInlineMath
-		return l.token(syntax.Dollar, start)
-	case ']':
-		l.position++
-		l.mode = lexNormal
-		return l.token(syntax.RBracket, start)
-	case ' ', '\t':
-		l.scanWhitespace()
-		return l.token(syntax.Whitespace, start)
-	case '\n', '\r':
-		l.scanNewline()
-		return l.token(syntax.Newline, start)
+		return l.finishParameter(start)
 	default:
-		l.position++
-		return l.token(syntax.ErrorToken, start)
+		return l.nextAfterParameter()
 	}
+}
+
+func (l *Lexer) nextInterpolatedIdentifier() Token {
+	start := l.position
+	if l.position >= l.reLexEnd {
+		l.mode = lexNormal
+		return l.Next()
+	}
+	if l.source[l.position] == '$' && l.isPlausibleParameterStart(l.reLexEnd) {
+		return l.startParameter(start, lexInterpolatedIdentifier)
+	}
+	for l.position < l.reLexEnd {
+		if l.source[l.position] == '$' && l.isPlausibleParameterStart(l.reLexEnd) {
+			break
+		}
+		l.position++
+	}
+	return l.token(syntax.IdentifierFragment, start)
+}
+
+func (l *Lexer) nextInterpolatedString() Token {
+	start := l.position
+	if l.position >= l.reLexEnd {
+		l.mode = lexNormal
+		return l.Next()
+	}
+	if l.source[l.position] == '"' {
+		l.position++
+		if l.position == l.reLexEnd {
+			l.mode = lexNormal
+		}
+		return l.token(syntax.StringQuote, start)
+	}
+	if l.source[l.position] == '$' && l.isPlausibleParameterStart(l.reLexEnd-1) {
+		return l.startParameter(start, lexInterpolatedString)
+	}
+	contentEnd := l.reLexEnd - 1
+	for l.position < contentEnd {
+		if l.source[l.position] == '\\' && l.position+1 < contentEnd {
+			l.position += 2
+			continue
+		}
+		if l.source[l.position] == '$' && l.isPlausibleParameterStart(contentEnd) {
+			break
+		}
+		l.position++
+	}
+	return l.token(syntax.StringFragment, start)
+}
+
+func (l *Lexer) nextVariableReference() Token {
+	start := l.position
+	if l.position >= l.reLexEnd {
+		l.mode = lexNormal
+		return l.Next()
+	}
+	l.position = l.reLexEnd
+	l.mode = lexNormal
+	return l.token(syntax.Identifier, start)
+}
+
+func (l *Lexer) startParameter(start text.TextSize, returnMode lexMode) Token {
+	if l.source[l.position] != '$' {
+		panic("lexer: expected parameter opener")
+	}
+	l.position++
+	l.parameterReturnMode = returnMode
+	l.mode = lexParameterName
+	return l.token(syntax.Dollar, start)
+}
+
+func (l *Lexer) finishParameter(start text.TextSize) Token {
+	l.position++
+	l.mode = l.parameterReturnMode
+	return l.token(syntax.Dollar, start)
+}
+
+func (l *Lexer) nextAfterParameter() Token {
+	l.mode = l.parameterReturnMode
+	return l.Next()
+}
+
+func (l *Lexer) atParameterContextEnd() bool {
+	switch l.parameterReturnMode {
+	case lexInterpolatedIdentifier:
+		return l.position >= l.reLexEnd
+	case lexInterpolatedString:
+		return l.position >= l.reLexEnd-1
+	case lexNormal,
+		lexInlineMath,
+		lexParameterName,
+		lexParameterArgument,
+		lexParameterArgumentEnd,
+		lexVariableReference:
+		return false
+	}
+	panic("lexer: unknown parameter return mode")
 }
 
 // Lex tokenizes source, including trivia and the final EOF token.
 func Lex(source string) []Token {
 	l := NewLexer(source)
-
 	var tokens []Token
 	for {
 		token := l.Next()
@@ -427,11 +527,9 @@ func (l *Lexer) eat(expected byte) bool {
 	if l.position >= l.sourceSize {
 		return false
 	}
-
 	if l.source[l.position] != expected {
 		return false
 	}
-
 	l.position++
 	return true
 }
@@ -452,14 +550,11 @@ func (l *Lexer) scanWhitespace() {
 func (l *Lexer) scanNewline() {
 	if l.source[l.position] == '\r' {
 		l.position++
-
 		if l.position < l.sourceSize && l.source[l.position] == '\n' {
 			l.position++
 		}
-
 		return
 	}
-
 	l.position++
 }
 
@@ -481,9 +576,7 @@ func (l *Lexer) scanString(quoteType byte) syntax.SyntaxKind {
 	if quoteType == '\'' {
 		kind = syntax.SingleQuotedString
 	}
-
 	l.position++
-
 	for l.position < l.sourceSize {
 		switch l.source[l.position] {
 		case '\\':
@@ -509,7 +602,6 @@ func (l *Lexer) scanAtom() {
 		if isAtomBoundary(l.source[l.position]) {
 			return
 		}
-
 		l.position++
 	}
 }
@@ -536,13 +628,53 @@ func (l *Lexer) scanParameterName() {
 
 func (l *Lexer) scanParameterArgument() {
 	for l.position < l.sourceSize {
-		switch l.source[l.position] {
-		case '$', ']', ' ', '\t', '\n', '\r':
+		if l.parameterReturnMode == lexInterpolatedIdentifier && l.position >= l.reLexEnd {
 			return
-		default:
-			l.position++
 		}
+		if l.parameterReturnMode == lexInterpolatedString {
+			if l.position >= l.reLexEnd-1 {
+				return
+			}
+			if l.source[l.position] == '\\' && l.position+1 < l.reLexEnd-1 {
+				l.position += 2
+				continue
+			}
+		}
+		if l.isParameterArgumentBoundary(l.source[l.position]) {
+			return
+		}
+		l.position++
 	}
+}
+
+func (l *Lexer) isParameterArgumentBoundary(char byte) bool {
+	if char == '$' || char == ' ' || char == '\t' || char == '\n' || char == '\r' {
+		return true
+	}
+	if l.parameterReturnMode == lexNormal {
+		return isAtomBoundary(char)
+	}
+	if l.parameterReturnMode == lexInterpolatedIdentifier {
+		return false
+	}
+	if l.parameterReturnMode == lexInterpolatedString {
+		return char == '"'
+	}
+	switch char {
+	case '#', '{', '}', '[', ']', '(', ')', ';', ',', '"', '\'':
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *Lexer) isPlausibleParameterStart(end text.TextSize) bool {
+	next := l.position + 1
+	if next >= end {
+		return false
+	}
+	char := l.source[next]
+	return isParameterNameByte(char) || char == '|' || char == '$'
 }
 
 func isParameterNameByte(char byte) bool {

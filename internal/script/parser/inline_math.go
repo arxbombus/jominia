@@ -17,22 +17,17 @@ func parseInlineMath(parser *Parser) {
 	if !parser.Eat(syntax.InlineMathStart) {
 		panic("grammar(script): expected inline math opener")
 	}
-
 	parser.ReLex(lexer.ReLexInlineMath)
 	if !isInlineMathEnd(parser) {
 		if _, ok := parseInlineMathExpression(parser, inlineMathLowestPrecedence); !ok {
 			parseBogusInlineMathExpression(parser)
 		}
 	}
-
 	if !isInlineMathEnd(parser) {
 		parseBogusInlineMathExpression(parser)
 	}
-
 	if !parser.Eat(syntax.RBracket) && !parser.At(syntax.EOF) {
-		// The inline lexer normally returns to normal mode when it emits ]. If
-		// recovery stopped at another boundary, restore normal tokenization for
-		// the unconsumed token and the statements that follow it.
+		// The inline lexer normally returns to normal mode when it emits ]. If recovery stopped at another boundary, restore normal tokenization for the unconsumed token and the statements that follow it.
 		parser.ReLex(lexer.ReLexNormal)
 	}
 	inlineMath.Complete(parser, syntax.InlineMath)
@@ -44,7 +39,6 @@ func parseInlineMathExpression(parser *Parser, minimumPrecedence int) (Completed
 	if !ok {
 		return CompletedMarker{}, false
 	}
-
 	for !parser.HasPrecedingLineBreak() {
 		precedence := inlineMathBinaryPrecedence(parser.Current())
 		if precedence < minimumPrecedence {
@@ -60,7 +54,6 @@ func parseInlineMathExpression(parser *Parser, minimumPrecedence int) (Completed
 		}
 		left = binary.Complete(parser, kind)
 	}
-
 	return left, true
 }
 
@@ -75,7 +68,6 @@ func parseInlineMathUnaryExpression(parser *Parser) (CompletedMarker, bool) {
 		}
 		return unary.Complete(parser, kind), true
 	}
-
 	return parseInlineMathPrimaryExpression(parser)
 }
 
@@ -85,10 +77,12 @@ func parseInlineMathPrimaryExpression(parser *Parser) (CompletedMarker, bool) {
 		number := parser.Start()
 		parser.Bump()
 		return number.Complete(parser, syntax.NumberExpression), true
-	case parser.At(syntax.Identifier), parser.At(syntax.At):
+	case parser.At(syntax.Identifier):
 		return parseInlineMathNameExpression(parser), true
+	case parser.At(syntax.At):
+		return parseVariableReference(parser), true
 	case parser.At(syntax.Dollar):
-		return parseInlineMathParameterExpression(parser), true
+		return parseParameterExpression(parser), true
 	case parser.At(syntax.LParen):
 		return parseInlineMathParenthesizedExpression(parser), true
 	case parser.At(syntax.Pipe):
@@ -100,30 +94,12 @@ func parseInlineMathPrimaryExpression(parser *Parser) (CompletedMarker, bool) {
 
 func parseInlineMathNameExpression(parser *Parser) CompletedMarker {
 	name := parser.Start()
-	hasAt := parser.Eat(syntax.At)
 	hasName := parser.Eat(syntax.Identifier)
 	kind := syntax.NameExpression
-	if hasAt && !hasName {
+	if !hasName {
 		kind = syntax.BogusExpression
 	}
 	return name.Complete(parser, kind)
-}
-
-func parseInlineMathParameterExpression(parser *Parser) CompletedMarker {
-	parameter := parser.Start()
-	if !parser.Eat(syntax.Dollar) {
-		panic("grammar(script): expected inline math parameter opener")
-	}
-	hasName := parser.Eat(syntax.ParameterName)
-	if parser.Eat(syntax.Pipe) {
-		parser.Eat(syntax.ParameterArgument)
-	}
-	closed := parser.Eat(syntax.Dollar)
-	kind := syntax.ParameterExpression
-	if !hasName || !closed {
-		kind = syntax.BogusExpression
-	}
-	return parameter.Complete(parser, kind)
 }
 
 func parseInlineMathParenthesizedExpression(parser *Parser) CompletedMarker {
@@ -145,7 +121,6 @@ func parseInlineMathAbsoluteExpression(parser *Parser) CompletedMarker {
 	if !parser.Eat(syntax.Pipe) {
 		panic("grammar(script): expected opening absolute-value delimiter")
 	}
-
 	hasExpression := false
 	if !parser.At(syntax.Pipe) {
 		_, hasExpression = parseInlineMathExpression(parser, inlineMathLowestPrecedence)

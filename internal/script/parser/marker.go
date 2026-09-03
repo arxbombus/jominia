@@ -16,9 +16,7 @@ func (m Marker) Complete(parser *Parser, kind syntax.SyntaxKind) CompletedMarker
 		panic("parser(script): marker is not pointing at a tombstone")
 	}
 	event.Kind = kind
-	parser.events = append(parser.events, Event{
-		Type: EventFinish,
-	})
+	parser.events = append(parser.events, Event{Type: EventFinish})
 	return CompletedMarker(m)
 }
 
@@ -31,10 +29,8 @@ func (m CompletedMarker) Precede(parser *Parser) Marker {
 	if event.ForwardParent != 0 {
 		panic("parser(script): completed marker already has a forward parent")
 	}
-
 	parent := parser.Start()
-	// Start may grow and reallocate the event slice, so look the child event
-	// up again instead of retaining a pointer across the append.
+	// Start may grow and reallocate the event slice, so look the child event up again instead of retaining a pointer across the append.
 	parser.events[m.position].ForwardParent = parent.position - m.position
 	return parent
 }

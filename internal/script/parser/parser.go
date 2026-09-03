@@ -35,6 +35,11 @@ func (p *Parser) CurrentRange() text.TextRange {
 	return p.source.CurrentRange()
 }
 
+// CurrentText returns the source text of the current token.
+func (p *Parser) CurrentText() string {
+	return p.source.CurrentText()
+}
+
 // NthRange returns the source range of the nth non-trivia token without consuming it. NthRange(0) is equivalent to CurrentRange.
 func (p *Parser) NthRange(n int) text.TextRange {
 	return p.source.NthRange(n)

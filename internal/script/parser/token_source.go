@@ -49,6 +49,12 @@ func (ts *TokenSource) CurrentRange() text.TextRange {
 	return ts.current.Range
 }
 
+// CurrentText returns the source text of the current non-trivia token.
+func (ts *TokenSource) CurrentText() string {
+	currentRange := ts.CurrentRange()
+	return ts.source[int(currentRange.Start()):int(currentRange.End())]
+}
+
 // NthRange returns the source range of the nth non-trivia token without
 // consuming it. NthRange(0) is equivalent to CurrentRange.
 func (ts *TokenSource) NthRange(n int) text.TextRange {
@@ -133,7 +139,6 @@ func (ts *TokenSource) nth(n int) tokenLookahead {
 func (ts *TokenSource) nextNonTriviaToken(isFirstToken bool) {
 	isTrailing := !isFirstToken
 	ts.hasPrecedingLineBreak = false
-
 	for {
 		token := ts.lexer.Next()
 

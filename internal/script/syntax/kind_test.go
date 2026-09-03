@@ -4,7 +4,6 @@ import "testing"
 
 func TestTombstoneIsZeroValue(t *testing.T) {
 	var kind SyntaxKind
-
 	if kind != Tombstone {
 		t.Fatalf("zero value of SyntaxKind = %d, want Tombstone (%d)", kind, Tombstone)
 	}
@@ -24,19 +23,16 @@ func TestTriviaKinds(t *testing.T) {
 		Newline,
 		Comment,
 	}
-
 	for _, kind := range trivia {
 		if !kind.IsTrivia() {
 			t.Errorf("%s should be trivia", kind)
 		}
 	}
-
 	nonTrivia := []SyntaxKind{
 		Identifier,
 		Equals,
 		StatementList,
 	}
-
 	for _, kind := range nonTrivia {
 		if kind.IsTrivia() {
 			t.Errorf("%s should not be trivia", kind)
@@ -55,20 +51,17 @@ func TestOperatorKinds(t *testing.T) {
 		GreaterEquals,
 		QuestionEquals,
 	}
-
 	for _, kind := range operators {
 		if !kind.IsOperator() {
 			t.Errorf("%s should be an operator", kind)
 		}
 	}
-
 	nonOperators := []SyntaxKind{
 		Bang,
 		Question,
 		Identifier,
 		LParen,
 	}
-
 	for _, kind := range nonOperators {
 		if kind.IsOperator() {
 			t.Errorf("%s should not be an operator", kind)
@@ -83,13 +76,11 @@ func TestScalarKinds(t *testing.T) {
 		String,
 		Boolean,
 	}
-
 	for _, kind := range scalars {
 		if !kind.IsScalar() {
 			t.Errorf("%s should be a scalar", kind)
 		}
 	}
-
 	nonScalars := []SyntaxKind{
 		SingleQuotedString,
 		Equals,
@@ -97,7 +88,6 @@ func TestScalarKinds(t *testing.T) {
 		LBracket,
 		LParen,
 	}
-
 	for _, kind := range nonScalars {
 		if kind.IsScalar() {
 			t.Errorf("%s should not be a scalar", kind)
@@ -112,7 +102,6 @@ func TestBogusKinds(t *testing.T) {
 	if !BogusExpression.IsBogus() {
 		t.Error("BogusExpression should be bogus")
 	}
-
 	if BinaryStatement.IsBogus() {
 		t.Error("BinaryStatement should not be bogus")
 	}
@@ -124,6 +113,9 @@ func TestSyntaxKindString(t *testing.T) {
 		want string
 	}{
 		{SingleQuotedString, "SingleQuotedString"},
+		{IdentifierFragment, "IdentifierFragment"},
+		{StringFragment, "StringFragment"},
+		{StringQuote, "StringQuote"},
 		{LParen, "LParen"},
 		{RParen, "RParen"},
 		{Bang, "Bang"},
@@ -143,12 +135,14 @@ func TestSyntaxKindString(t *testing.T) {
 		{ConditionalBlock, "ConditionalBlock"},
 		{ConditionalHeader, "ConditionalHeader"},
 		{InlineMath, "InlineMath"},
+		{VariableReference, "VariableReference"},
+		{InterpolatedIdentifier, "InterpolatedIdentifier"},
+		{InterpolatedString, "InterpolatedString"},
 		{BinaryExpression, "BinaryExpression"},
 		{AbsoluteExpression, "AbsoluteExpression"},
 		{BogusStatement, "BogusStatement"},
 		{BogusExpression, "BogusExpression"},
 	}
-
 	for _, test := range tests {
 		if got := test.kind.String(); got != test.want {
 			t.Errorf("%d.String() = %q, want %q", test.kind, got, test.want)

@@ -269,7 +269,7 @@ func TestLex(t *testing.T) {
 		},
 		{
 			name:   "hyphens and variables remain atoms",
-			source: `-42 dashed-identifier @my_var $VALUE$`,
+			source: `-42 dashed-identifier @my_var $VALUE$ $VALUE|100$ prefix_$VALUE$ $VALUE$_suffix`,
 			want: []expectedToken{
 				{syntax.Number, "-42"},
 				{syntax.Whitespace, " "},
@@ -278,6 +278,12 @@ func TestLex(t *testing.T) {
 				{syntax.Identifier, "@my_var"},
 				{syntax.Whitespace, " "},
 				{syntax.Identifier, "$VALUE$"},
+				{syntax.Whitespace, " "},
+				{syntax.Identifier, "$VALUE|100$"},
+				{syntax.Whitespace, " "},
+				{syntax.Identifier, "prefix_$VALUE$"},
+				{syntax.Whitespace, " "},
+				{syntax.Identifier, "$VALUE$_suffix"},
 				{syntax.EOF, ""},
 			},
 		},
@@ -330,7 +336,6 @@ func TestLex(t *testing.T) {
 			},
 		},
 	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assertTokens(t, test.source, test.want)
@@ -341,18 +346,15 @@ func TestLex(t *testing.T) {
 func TestReLexInlineMath(t *testing.T) {
 	const source = `@[1-leo_x*($FACTOR|2$+@foo)%3] next-value`
 	l := NewLexer(source)
-
 	opener := l.Next()
 	if opener.Kind != syntax.InlineMathStart {
 		t.Fatalf("opener kind = %s, want InlineMathStart", opener.Kind)
 	}
-
 	current := l.Next()
 	if current.Kind != syntax.Identifier {
 		t.Fatalf("normal interior kind = %s, want Identifier", current.Kind)
 	}
 	current = l.ReLex(current, ReLexInlineMath)
-
 	got := []Token{opener}
 	for {
 		got = append(got, current)
@@ -361,7 +363,6 @@ func TestReLexInlineMath(t *testing.T) {
 		}
 		current = l.Next()
 	}
-
 	want := []expectedToken{
 		{syntax.InlineMathStart, "@["},
 		{syntax.Number, "1"},
@@ -399,6 +400,213 @@ func TestReLexInlineMath(t *testing.T) {
 	}
 }
 
+func TestReLexParameterAndRestoreNormalMode(t *testing.T) {
+	const source = `$VALUE|100$ next-value = yes`
+	l := NewLexer(source)
+	current := l.Next()
+	if current.Kind != syntax.Identifier {
+		t.Fatalf("normal parameter kind = %s, want Identifier", current.Kind)
+	}
+	current = l.ReLex(current, ReLexParameter)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "VALUE"},
+		{syntax.Pipe, "|"},
+		{syntax.ParameterArgument, "100"},
+		{syntax.Dollar, "$"},
+		{syntax.Whitespace, " "},
+		{syntax.Identifier, "next-value"},
+		{syntax.Whitespace, " "},
+		{syntax.Equals, "="},
+		{syntax.Whitespace, " "},
+		{syntax.Boolean, "yes"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestReLexMalformedParameterRestoresNormalModeAtLineBreak(t *testing.T) {
+	const source = "$VALUE\nnext = yes"
+	l := NewLexer(source)
+	current := l.Next()
+	current = l.ReLex(current, ReLexParameter)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "VALUE"},
+		{syntax.Newline, "\n"},
+		{syntax.Identifier, "next"},
+		{syntax.Whitespace, " "},
+		{syntax.Equals, "="},
+		{syntax.Whitespace, " "},
+		{syntax.Boolean, "yes"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestReLexInterpolatedIdentifierAndRestoreNormalMode(t *testing.T) {
+	const source = `ethic_$ETHIC$_$TIER|1$ next-value`
+	l := NewLexer(source)
+	current := l.Next()
+	if current.Kind != syntax.Identifier {
+		t.Fatalf("normal interpolated identifier = %s, want Identifier", current.Kind)
+	}
+	current = l.ReLex(current, ReLexInterpolatedIdentifier)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.IdentifierFragment, "ethic_"},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "ETHIC"},
+		{syntax.Dollar, "$"},
+		{syntax.IdentifierFragment, "_"},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "TIER"},
+		{syntax.Pipe, "|"},
+		{syntax.ParameterArgument, "1"},
+		{syntax.Dollar, "$"},
+		{syntax.Whitespace, " "},
+		{syntax.Identifier, "next-value"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestReLexInterpolatedStringKeepsInlineMathAsText(t *testing.T) {
+	const source = `"$KEY$_a @\[ $COUNT$ * 500]" next`
+	l := NewLexer(source)
+	current := l.Next()
+	if current.Kind != syntax.String {
+		t.Fatalf("normal interpolated string = %s, want String", current.Kind)
+	}
+	current = l.ReLex(current, ReLexInterpolatedString)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.StringQuote, `"`},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "KEY"},
+		{syntax.Dollar, "$"},
+		{syntax.StringFragment, `_a @\[ `},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "COUNT"},
+		{syntax.Dollar, "$"},
+		{syntax.StringFragment, ` * 500]`},
+		{syntax.StringQuote, `"`},
+		{syntax.Whitespace, " "},
+		{syntax.Identifier, "next"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestReLexMalformedInterpolationStopsAtOriginalAtom(t *testing.T) {
+	const source = "prefix_$NAME\nnext = yes"
+	l := NewLexer(source)
+	current := l.Next()
+	current = l.ReLex(current, ReLexInterpolatedIdentifier)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.IdentifierFragment, "prefix_"},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "NAME"},
+		{syntax.Newline, "\n"},
+		{syntax.Identifier, "next"},
+		{syntax.Whitespace, " "},
+		{syntax.Equals, "="},
+		{syntax.Whitespace, " "},
+		{syntax.Boolean, "yes"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestReLexMissingInterpolationArgumentStopsAtOriginalAtom(t *testing.T) {
+	const source = `0$|#comment`
+	l := NewLexer(source)
+	current := l.Next()
+	current = l.ReLex(current, ReLexInterpolatedIdentifier)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.IdentifierFragment, "0"},
+		{syntax.Dollar, "$"},
+		{syntax.Pipe, "|"},
+		{syntax.Comment, "#comment"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestReLexVariableReferenceAndRestoreNormalMode(t *testing.T) {
+	const source = `@example = 2`
+	l := NewLexer(source)
+	current := l.Next()
+	if current.Kind != syntax.Identifier {
+		t.Fatalf("normal variable = %s, want Identifier", current.Kind)
+	}
+	current = l.ReLex(current, ReLexVariableReference)
+	got := []Token{}
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		current = l.Next()
+	}
+	want := []expectedToken{
+		{syntax.At, "@"},
+		{syntax.Identifier, "example"},
+		{syntax.Whitespace, " "},
+		{syntax.Equals, "="},
+		{syntax.Whitespace, " "},
+		{syntax.Number, "2"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
 func TestLexRecognizesEscapedInlineMathStart(t *testing.T) {
 	assertTokens(t, `@\[1]`, []expectedToken{
 		{syntax.InlineMathStart, `@\[`},
@@ -410,9 +618,12 @@ func TestLexRecognizesEscapedInlineMathStart(t *testing.T) {
 
 func assertTokens(t *testing.T, source string, want []expectedToken) {
 	t.Helper()
-
 	got := Lex(source)
+	assertTokenSequence(t, source, got, want)
+}
 
+func assertTokenSequence(t *testing.T, source string, got []Token, want []expectedToken) {
+	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf(
 			"token count = %d, want %d\n%s",
@@ -421,7 +632,6 @@ func assertTokens(t *testing.T, source string, want []expectedToken) {
 			formatTokens(source, got),
 		)
 	}
-
 	for i, token := range got {
 		expected := want[i]
 
@@ -434,11 +644,9 @@ func assertTokens(t *testing.T, source string, want []expectedToken) {
 				formatTokens(source, got),
 			)
 		}
-
 		start := int(token.Range.Start())
 		end := int(token.Range.End())
 		gotText := source[start:end]
-
 		if gotText != expected.text {
 			t.Fatalf(
 				"token %d text = %q, want %q\n%s",
@@ -453,11 +661,9 @@ func assertTokens(t *testing.T, source string, want []expectedToken) {
 
 func formatTokens(source string, tokens []Token) string {
 	var result string
-
 	for _, token := range tokens {
 		start := int(token.Range.Start())
 		end := int(token.Range.End())
-
 		result += fmt.Sprintf(
 			"%v [%d,%d) %q\n",
 			token.Kind,
@@ -466,6 +672,5 @@ func formatTokens(source string, tokens []Token) string {
 			source[start:end],
 		)
 	}
-
 	return result
 }

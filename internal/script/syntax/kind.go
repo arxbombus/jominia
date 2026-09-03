@@ -20,6 +20,8 @@ const (
 	String
 	SingleQuotedString
 	Boolean
+	IdentifierFragment
+	StringFragment
 
 	// Punctuation and operators.
 	LCurly
@@ -49,6 +51,7 @@ const (
 	Star
 	Slash
 	Percent
+	StringQuote
 	ParameterName
 	ParameterArgument
 
@@ -70,6 +73,9 @@ const (
 	NumberExpression
 	NameExpression
 	ParameterExpression
+	VariableReference
+	InterpolatedIdentifier
+	InterpolatedString
 	UnaryExpression
 	BinaryExpression
 	ParenthesizedExpression
@@ -108,8 +114,7 @@ func (k SyntaxKind) IsOperator() bool {
 		k == QuestionEquals
 }
 
-// IsScalar reports whether k is a scalar accepted by the normal grammar.
-// Single-quoted strings are currently only recognized inside opaque groups.
+// IsScalar reports whether k is a single-token scalar accepted by the normal grammar. Structured logical scalars are parsed contextually. Single-quoted strings are currently only recognized inside opaque groups.
 func (k SyntaxKind) IsScalar() bool {
 	return k == Identifier ||
 		k == Number ||
@@ -141,6 +146,10 @@ func (k SyntaxKind) String() string {
 		return "SingleQuotedString"
 	case Boolean:
 		return "Boolean"
+	case IdentifierFragment:
+		return "IdentifierFragment"
+	case StringFragment:
+		return "StringFragment"
 	case LCurly:
 		return "LCurly"
 	case RCurly:
@@ -195,6 +204,8 @@ func (k SyntaxKind) String() string {
 		return "Slash"
 	case Percent:
 		return "Percent"
+	case StringQuote:
+		return "StringQuote"
 	case ParameterName:
 		return "ParameterName"
 	case ParameterArgument:
@@ -233,6 +244,12 @@ func (k SyntaxKind) String() string {
 		return "NameExpression"
 	case ParameterExpression:
 		return "ParameterExpression"
+	case VariableReference:
+		return "VariableReference"
+	case InterpolatedIdentifier:
+		return "InterpolatedIdentifier"
+	case InterpolatedString:
+		return "InterpolatedString"
 	case UnaryExpression:
 		return "UnaryExpression"
 	case BinaryExpression:

@@ -76,9 +76,7 @@ func parseStatement(parser *Parser) bool {
 		default:
 			panic("grammar(script): unknown block header status")
 		}
-
 		return true
-
 	default:
 		return false
 	}
@@ -97,10 +95,9 @@ func parseValueStatement(parser *Parser) {
 // parseBinaryStatement parses a scalar, operator, and unbraced value list.
 func parseBinaryStatement(parser *Parser) {
 	statement := parser.Start()
-	if !parser.Current().IsScalar() {
+	if !parseScalar(parser) {
 		panic("grammar(script): binary statement must begin with a scalar")
 	}
-	parser.Bump()
 	if !parser.Current().IsOperator() {
 		panic("grammar(script): binary statement is missing an operator")
 	}
@@ -145,13 +142,12 @@ func parseScalarList(parser *Parser, count int) {
 	}
 	list := parser.Start()
 	for i := 0; i < count; i++ {
-		if !parser.Current().IsScalar() {
-			panic("grammar(script): expected scalar in scalar list")
-		}
 		if i > 0 && parser.HasPrecedingLineBreak() {
 			panic("grammar(script): scalar list cannot cross a line break")
 		}
-		parser.Bump()
+		if !parseScalar(parser) {
+			panic("grammar(script): expected scalar in scalar list")
+		}
 	}
 	list.Complete(parser, syntax.ScalarList)
 }
@@ -178,15 +174,13 @@ func parseValueList(parser *Parser) {
 			}
 		}
 	}
-
 	list.Complete(parser, syntax.ValueList)
 }
 
 // parseValue parses one syntactic value.
 func parseValue(parser *Parser) bool {
 	switch {
-	case parser.Current().IsScalar():
-		parser.Bump()
+	case parseScalar(parser):
 		if parser.At(syntax.LBracket) && !parser.HasPrecedingLineBreak() {
 			parseBracketGroup(parser)
 		}
@@ -199,6 +193,11 @@ func parseValue(parser *Parser) bool {
 		return true
 	case parser.At(syntax.InlineMathStart):
 		parseInlineMath(parser)
+		return true
+	case parser.At(syntax.ErrorToken):
+		bogus := parser.Start()
+		parser.Bump()
+		bogus.Complete(parser, syntax.BogusExpression)
 		return true
 	default:
 		return false
@@ -247,7 +246,6 @@ func parseOpaque(parser *Parser, startKind, endKind, nodeKind syntax.SyntaxKind)
 			parser.Bump()
 		}
 	}
-
 	parser.Eat(endKind)
 	opaque.Complete(parser, nodeKind)
 }
@@ -263,14 +261,14 @@ func parseOpaque(parser *Parser, startKind, endKind, nodeKind syntax.SyntaxKind)
 //	type add_wargoal_panel = default_block_window {
 //	blockoverride "name" {
 func scanBlockHeader(parser *Parser) blockHeaderScan {
-	if !parser.Current().IsScalar() {
+	offset, ok := scanScalar(parser, 0)
+	if !ok {
 		return blockHeaderScan{status: blockHeaderNoMatch}
 	}
 	shape := blockHeaderShape{leadingScalars: 1}
-	offset := 1
-	if parser.Nth(offset).IsScalar() && !parser.NthHasPrecedingLineBreak(offset) {
+	if nextOffset, hasScalar := scanScalar(parser, offset); hasScalar && !parser.NthHasPrecedingLineBreak(offset) {
 		shape.leadingScalars = 2
-		offset++
+		offset = nextOffset
 	}
 	if parser.Nth(offset) == syntax.LCurly {
 		return blockHeaderScan{
@@ -300,11 +298,12 @@ func scanBlockHeader(parser *Parser) blockHeaderScan {
 		}
 		return blockHeaderScan{status: blockHeaderNoMatch}
 	}
-	if !parser.Nth(offset).IsScalar() {
+	nextOffset, hasTrailingScalar := scanScalar(parser, offset)
+	if !hasTrailingScalar {
 		return blockHeaderScan{status: blockHeaderNoMatch}
 	}
 	shape.hasTrailingScalar = true
-	offset++
+	offset = nextOffset
 	if parser.Nth(offset) == syntax.LCurly {
 		return blockHeaderScan{
 			status:      blockHeaderValid,
@@ -329,8 +328,8 @@ func malformedBlockOffset(parser *Parser, extraOperatorOffset int) (int, bool) {
 	if parser.Nth(nextOffset) == syntax.LCurly {
 		return nextOffset, true
 	}
-	if parser.Nth(nextOffset).IsScalar() && parser.Nth(nextOffset+1) == syntax.LCurly {
-		return nextOffset + 1, true
+	if afterScalar, hasScalar := scanScalar(parser, nextOffset); hasScalar && parser.Nth(afterScalar) == syntax.LCurly {
+		return afterScalar, true
 	}
 	return 0, false
 }
@@ -339,7 +338,9 @@ func malformedBlockOffset(parser *Parser, extraOperatorOffset int) (int, bool) {
 func parseBogusBlockStatement(parser *Parser, blockOffset int) {
 	bogus := parser.Start()
 	for i := 0; i < blockOffset; i++ {
-		parser.Bump()
+		if !parseScalar(parser) {
+			parser.Bump()
+		}
 	}
 	if !parser.At(syntax.LCurly) {
 		panic("grammar(script): malformed block statement is missing its block")
@@ -352,7 +353,9 @@ func parseBogusBlockStatement(parser *Parser, blockOffset int) {
 // parseBogusBinaryStatement recovers a same-line binary statement containing a repeated operator while preserving following recognizable statements.
 func parseBogusBinaryStatement(parser *Parser) {
 	bogus := parser.Start()
-	parser.Bump() // leading scalar
+	if !parseScalar(parser) {
+		panic("grammar(script): bogus binary statement must begin with a scalar")
+	}
 	parser.Bump() // first operator
 	for !parser.At(syntax.EOF) {
 		if parser.At(syntax.Semicolon) {
@@ -462,9 +465,7 @@ func parseConditionalHeader(parser *Parser) {
 		panic("grammar(script): expected conditional header opener")
 	}
 	parser.Eat(syntax.Bang)
-	if parser.Current().IsScalar() {
-		parser.Bump()
-	}
+	parseScalar(parser)
 	parser.Eat(syntax.RBracket)
 	header.Complete(parser, syntax.ConditionalHeader)
 }
