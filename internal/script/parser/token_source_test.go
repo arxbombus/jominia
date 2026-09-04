@@ -95,6 +95,32 @@ func TestTokenSourceReLexesInlineMathAndRestoresNormalMode(t *testing.T) {
 	}
 }
 
+func TestTokenSourceBumpsWithBracketContext(t *testing.T) {
+	ts := NewTokenSource(`[Root.Get] next.value`)
+	if ts.Current() != syntax.LBracket {
+		t.Fatalf("current = %s, want LBracket", ts.Current())
+	}
+	ts.BumpWithContext(lexer.LexBracketExpression)
+	want := []syntax.SyntaxKind{
+		syntax.Identifier,
+		syntax.Dot,
+		syntax.Identifier,
+		syntax.RBracket,
+	}
+	for _, kind := range want {
+		if ts.Current() != kind {
+			t.Fatalf("current = %s, want %s", ts.Current(), kind)
+		}
+		if kind != syntax.RBracket {
+			ts.BumpWithContext(lexer.LexBracketExpression)
+		}
+	}
+	ts.BumpWithContext(lexer.LexNormal)
+	if ts.Current() != syntax.Identifier || ts.CurrentText() != "next.value" {
+		t.Fatalf("normal token after bracket = %s %q, want Identifier next.value", ts.Current(), ts.CurrentText())
+	}
+}
+
 func TestTokenSourceReLexesParameterAndRestoresNormalMode(t *testing.T) {
 	ts := NewTokenSource(`$VALUE|100$ next-value`)
 	if ts.Current() != syntax.Identifier {

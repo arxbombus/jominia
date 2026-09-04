@@ -11,13 +11,12 @@ const (
 	inlineMathMultiplicativePrecedence = 2
 )
 
-// parseInlineMath parses an @[...] (or @\[...]) expression value. Only the current token stream is re-lexed: the resulting expression tokens flow through the same event stream and lossless green-tree sink as normal script.
+// parseInlineMath parses an @[...] (or @\[...]) expression value. The opener selects the arithmetic lexer context for the following token; the closer returns tokenization to normal script.
 func parseInlineMath(parser *Parser) {
 	inlineMath := parser.Start()
-	if !parser.Eat(syntax.InlineMathStart) {
+	if !parser.EatWithContext(syntax.InlineMathStart, lexer.LexInlineMath) {
 		panic("grammar(script): expected inline math opener")
 	}
-	parser.ReLex(lexer.ReLexInlineMath)
 	if !isInlineMathEnd(parser) {
 		if _, ok := parseInlineMathExpression(parser, inlineMathLowestPrecedence); !ok {
 			parseBogusInlineMathExpression(parser)
@@ -26,7 +25,7 @@ func parseInlineMath(parser *Parser) {
 	if !isInlineMathEnd(parser) {
 		parseBogusInlineMathExpression(parser)
 	}
-	if !parser.Eat(syntax.RBracket) && !parser.At(syntax.EOF) {
+	if !parser.EatWithContext(syntax.RBracket, lexer.LexNormal) && !parser.At(syntax.EOF) {
 		// The inline lexer normally returns to normal mode when it emits ]. If recovery stopped at another boundary, restore normal tokenization for the unconsumed token and the statements that follow it.
 		parser.ReLex(lexer.ReLexNormal)
 	}
@@ -46,7 +45,7 @@ func parseInlineMathExpression(parser *Parser, minimumPrecedence int) (Completed
 		}
 
 		binary := left.Precede(parser)
-		parser.Bump()
+		parser.BumpWithContext(lexer.LexInlineMath)
 		_, hasRight := parseInlineMathExpression(parser, precedence+1)
 		kind := syntax.BinaryExpression
 		if !hasRight {
@@ -60,7 +59,7 @@ func parseInlineMathExpression(parser *Parser, minimumPrecedence int) (Completed
 func parseInlineMathUnaryExpression(parser *Parser) (CompletedMarker, bool) {
 	if parser.At(syntax.Plus) || parser.At(syntax.Minus) {
 		unary := parser.Start()
-		parser.Bump()
+		parser.BumpWithContext(lexer.LexInlineMath)
 		_, hasOperand := parseInlineMathUnaryExpression(parser)
 		kind := syntax.UnaryExpression
 		if !hasOperand {
@@ -75,7 +74,7 @@ func parseInlineMathPrimaryExpression(parser *Parser) (CompletedMarker, bool) {
 	switch {
 	case parser.At(syntax.Number):
 		number := parser.Start()
-		parser.Bump()
+		parser.BumpWithContext(lexer.LexInlineMath)
 		return number.Complete(parser, syntax.NumberExpression), true
 	case parser.At(syntax.Identifier):
 		return parseInlineMathNameExpression(parser), true
@@ -94,7 +93,7 @@ func parseInlineMathPrimaryExpression(parser *Parser) (CompletedMarker, bool) {
 
 func parseInlineMathNameExpression(parser *Parser) CompletedMarker {
 	name := parser.Start()
-	hasName := parser.Eat(syntax.Identifier)
+	hasName := parser.EatWithContext(syntax.Identifier, lexer.LexInlineMath)
 	kind := syntax.NameExpression
 	if !hasName {
 		kind = syntax.BogusExpression
@@ -104,11 +103,11 @@ func parseInlineMathNameExpression(parser *Parser) CompletedMarker {
 
 func parseInlineMathParenthesizedExpression(parser *Parser) CompletedMarker {
 	parenthesized := parser.Start()
-	if !parser.Eat(syntax.LParen) {
+	if !parser.EatWithContext(syntax.LParen, lexer.LexInlineMath) {
 		panic("grammar(script): expected opening parenthesis")
 	}
 	_, hasExpression := parseInlineMathExpression(parser, inlineMathLowestPrecedence)
-	closed := parser.Eat(syntax.RParen)
+	closed := parser.EatWithContext(syntax.RParen, lexer.LexInlineMath)
 	kind := syntax.ParenthesizedExpression
 	if !hasExpression || !closed {
 		kind = syntax.BogusExpression
@@ -118,14 +117,14 @@ func parseInlineMathParenthesizedExpression(parser *Parser) CompletedMarker {
 
 func parseInlineMathAbsoluteExpression(parser *Parser) CompletedMarker {
 	absolute := parser.Start()
-	if !parser.Eat(syntax.Pipe) {
+	if !parser.EatWithContext(syntax.Pipe, lexer.LexInlineMath) {
 		panic("grammar(script): expected opening absolute-value delimiter")
 	}
 	hasExpression := false
 	if !parser.At(syntax.Pipe) {
 		_, hasExpression = parseInlineMathExpression(parser, inlineMathLowestPrecedence)
 	}
-	closed := parser.Eat(syntax.Pipe)
+	closed := parser.EatWithContext(syntax.Pipe, lexer.LexInlineMath)
 	kind := syntax.AbsoluteExpression
 	if !hasExpression || !closed {
 		kind = syntax.BogusExpression
@@ -139,7 +138,7 @@ func parseBogusInlineMathExpression(parser *Parser) {
 	}
 	bogus := parser.Start()
 	for !isInlineMathEnd(parser) && !parser.HasPrecedingLineBreak() {
-		parser.Bump()
+		parser.BumpWithContext(lexer.LexInlineMath)
 	}
 	bogus.Complete(parser, syntax.BogusExpression)
 }

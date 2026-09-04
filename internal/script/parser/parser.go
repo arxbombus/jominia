@@ -89,6 +89,21 @@ func (p *Parser) Bump() {
 	p.source.Bump()
 }
 
+// BumpWithContext emits the current token and scans the next token in context.
+func (p *Parser) BumpWithContext(context lexer.LexContext) {
+	kind := p.Current()
+	if kind == syntax.EOF {
+		return
+	}
+	end := p.source.CurrentRange().End()
+	p.events = append(p.events, Event{
+		Type: EventToken,
+		Kind: kind,
+		End:  end,
+	})
+	p.source.BumpWithContext(context)
+}
+
 // ReLex replaces the current token using a context-specific lexer grammar.
 func (p *Parser) ReLex(context lexer.ReLexContext) {
 	p.source.ReLex(context)
@@ -100,6 +115,15 @@ func (p *Parser) Eat(kind syntax.SyntaxKind) bool {
 		return false
 	}
 	p.Bump()
+	return true
+}
+
+// EatWithContext consumes kind and scans the next token in context.
+func (p *Parser) EatWithContext(kind syntax.SyntaxKind, context lexer.LexContext) bool {
+	if !p.At(kind) {
+		return false
+	}
+	p.BumpWithContext(context)
 	return true
 }
 

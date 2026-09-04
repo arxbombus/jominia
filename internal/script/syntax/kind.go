@@ -42,6 +42,7 @@ const (
 	QuestionEquals
 	Semicolon
 	Comma
+	Dot
 	InlineMathStart
 	At
 	Dollar
@@ -65,13 +66,18 @@ const (
 	ScalarList
 	ValueList
 	Block
-	BracketGroup
-	ParenGroup
 	ConditionalBlock
 	ConditionalHeader
 	InlineMath
+	BracketExpression
+	CallExpression
+	ArgumentList
+	MemberExpression
+	FormatSpecifier
 	NumberExpression
+	BooleanExpression
 	NameExpression
+	StringExpression
 	ParameterExpression
 	VariableReference
 	InterpolatedIdentifier
@@ -114,7 +120,9 @@ func (k SyntaxKind) IsOperator() bool {
 		k == QuestionEquals
 }
 
-// IsScalar reports whether k is a single-token scalar accepted by the normal grammar. Structured logical scalars are parsed contextually. Single-quoted strings are currently only recognized inside opaque groups.
+// IsScalar reports whether k is a single-token scalar accepted by the normal
+// grammar. Structured logical scalars are parsed contextually. Single-quoted
+// strings are recognized only by the bracket-expression grammar.
 func (k SyntaxKind) IsScalar() bool {
 	return k == Identifier ||
 		k == Number ||
@@ -186,6 +194,8 @@ func (k SyntaxKind) String() string {
 		return "Semicolon"
 	case Comma:
 		return "Comma"
+	case Dot:
+		return "Dot"
 	case InlineMathStart:
 		return "InlineMathStart"
 	case At:
@@ -228,20 +238,30 @@ func (k SyntaxKind) String() string {
 		return "ValueList"
 	case Block:
 		return "Block"
-	case BracketGroup:
-		return "BracketGroup"
-	case ParenGroup:
-		return "ParenGroup"
 	case ConditionalBlock:
 		return "ConditionalBlock"
 	case ConditionalHeader:
 		return "ConditionalHeader"
 	case InlineMath:
 		return "InlineMath"
+	case BracketExpression:
+		return "BracketExpression"
+	case CallExpression:
+		return "CallExpression"
+	case ArgumentList:
+		return "ArgumentList"
+	case MemberExpression:
+		return "MemberExpression"
+	case FormatSpecifier:
+		return "FormatSpecifier"
 	case NumberExpression:
 		return "NumberExpression"
+	case BooleanExpression:
+		return "BooleanExpression"
 	case NameExpression:
 		return "NameExpression"
+	case StringExpression:
+		return "StringExpression"
 	case ParameterExpression:
 		return "ParameterExpression"
 	case VariableReference:

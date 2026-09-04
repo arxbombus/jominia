@@ -1,6 +1,9 @@
 package parser
 
-import "github.com/arxbombus/jominia/internal/script/syntax"
+import (
+	"github.com/arxbombus/jominia/internal/script/lexer"
+	"github.com/arxbombus/jominia/internal/script/syntax"
+)
 
 type blockHeaderStatus uint8
 
@@ -182,14 +185,14 @@ func parseValue(parser *Parser) bool {
 	switch {
 	case parseScalar(parser):
 		if parser.At(syntax.LBracket) && !parser.HasPrecedingLineBreak() {
-			parseBracketGroup(parser)
+			parseBracketExpression(parser, lexer.LexNormal)
 		}
 		return true
 	case parser.At(syntax.LCurly):
 		parseBlock(parser)
 		return true
 	case parser.At(syntax.LBracket):
-		parseBracketGroup(parser)
+		parseBracketExpression(parser, lexer.LexNormal)
 		return true
 	case parser.At(syntax.InlineMathStart):
 		parseInlineMath(parser)
@@ -213,41 +216,6 @@ func parseBlock(parser *Parser) {
 	parseStatementList(parser, syntax.RCurly)
 	parser.Eat(syntax.RCurly)
 	block.Complete(parser, syntax.Block)
-}
-
-// parseBracketGroup parses a bracket-delimited opaque group.
-func parseBracketGroup(parser *Parser) {
-	parseOpaque(parser, syntax.LBracket, syntax.RBracket, syntax.BracketGroup)
-}
-
-// parseParenGroup parses a parenthesis-delimited opaque group.
-func parseParenGroup(parser *Parser) {
-	parseOpaque(parser, syntax.LParen, syntax.RParen, syntax.ParenGroup)
-}
-
-// parseOpaque parses a delimited group without interpreting its contents while still preserving nested blocks and groups structurally.
-func parseOpaque(parser *Parser, startKind, endKind, nodeKind syntax.SyntaxKind) {
-	opaque := parser.Start()
-	if !parser.Eat(startKind) {
-		panic("grammar(script): expected start delimiter not found")
-	}
-	for !parser.At(endKind) && !parser.At(syntax.EOF) {
-		if isClosingDelimiter(parser.Current()) {
-			break
-		}
-		switch {
-		case parser.At(syntax.LCurly):
-			parseBlock(parser)
-		case parser.At(syntax.LBracket):
-			parseBracketGroup(parser)
-		case parser.At(syntax.LParen):
-			parseParenGroup(parser)
-		default:
-			parser.Bump()
-		}
-	}
-	parser.Eat(endKind)
-	opaque.Complete(parser, nodeKind)
 }
 
 // scanBlockHeader classifies the scalar sequence at the current token as a valid block header, a malformed block-like header, or not a block header.

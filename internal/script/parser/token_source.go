@@ -89,6 +89,14 @@ func (ts *TokenSource) Bump() {
 	ts.nextNonTriviaToken(false)
 }
 
+// BumpWithContext advances using context for the next token.
+func (ts *TokenSource) BumpWithContext(context lexer.LexContext) {
+	if ts.current.Kind == syntax.EOF {
+		return
+	}
+	ts.nextNonTriviaTokenWithContext(context)
+}
+
 // ReLex replaces the current token with one scanned in context.
 func (ts *TokenSource) ReLex(context lexer.ReLexContext) {
 	ts.current = ts.lexer.ReLex(ts.current, context)
@@ -142,6 +150,34 @@ func (ts *TokenSource) nextNonTriviaToken(isFirstToken bool) {
 	for {
 		token := ts.lexer.Next()
 
+		if !token.Kind.IsTrivia() {
+			ts.current = token
+			return
+		}
+		if token.Kind == syntax.Newline {
+			isTrailing = false
+			ts.hasPrecedingLineBreak = true
+		}
+		ts.trivia = append(ts.trivia, Trivia{
+			Kind:       token.Kind,
+			Range:      token.Range,
+			IsTrailing: isTrailing,
+		})
+	}
+}
+
+func (ts *TokenSource) nextNonTriviaTokenWithContext(context lexer.LexContext) {
+	isTrailing := true
+	ts.hasPrecedingLineBreak = false
+	first := true
+	for {
+		var token lexer.Token
+		if first {
+			token = ts.lexer.NextWithContext(context)
+			first = false
+		} else {
+			token = ts.lexer.Next()
+		}
 		if !token.Kind.IsTrivia() {
 			ts.current = token
 			return

@@ -31,11 +31,22 @@ const (
 	ReLexVariableReference
 )
 
+// LexContext selects the grammar used to scan the token after the current token. Unlike ReLexContext, it never changes a token that has already been scanned.
+type LexContext uint8
+
+const (
+	LexNormal LexContext = iota
+	LexInlineMath
+	LexBracketExpression
+	LexInterpolatedString
+)
+
 type lexMode uint8
 
 const (
 	lexNormal lexMode = iota
 	lexInlineMath
+	lexBracketExpression
 	lexParameterName
 	lexParameterArgument
 	lexParameterArgumentEnd
@@ -59,6 +70,8 @@ func (l *Lexer) Next() Token {
 		return l.nextNormal()
 	case lexInlineMath:
 		return l.nextInlineMath()
+	case lexBracketExpression:
+		return l.nextBracketExpression()
 	case lexParameterName:
 		return l.nextParameterName()
 	case lexParameterArgument:
@@ -73,6 +86,36 @@ func (l *Lexer) Next() Token {
 		return l.nextVariableReference()
 	default:
 		panic("lexer: unknown lex mode")
+	}
+}
+
+// NextWithContext scans the next token using context. Parameter and interpolation sub-grammars remain active until their own bounded region ends, then return to the requested enclosing grammar.
+func (l *Lexer) NextWithContext(context LexContext) Token {
+	switch l.mode {
+	case lexNormal, lexInlineMath, lexBracketExpression, lexInterpolatedString:
+		l.mode = modeForContext(context)
+	case lexParameterName,
+		lexParameterArgument,
+		lexParameterArgumentEnd,
+		lexInterpolatedIdentifier,
+		lexVariableReference:
+		// Bounded sub-grammars decide when to return to their enclosing mode.
+	}
+	return l.Next()
+}
+
+func modeForContext(context LexContext) lexMode {
+	switch context {
+	case LexNormal:
+		return lexNormal
+	case LexInlineMath:
+		return lexInlineMath
+	case LexBracketExpression:
+		return lexBracketExpression
+	case LexInterpolatedString:
+		return lexInterpolatedString
+	default:
+		panic("lexer: unknown lex context")
 	}
 }
 
@@ -305,6 +348,109 @@ func (l *Lexer) nextInlineMath() Token {
 	}
 }
 
+func (l *Lexer) nextBracketExpression() Token {
+	start := l.position
+	if l.position >= l.sourceSize {
+		return l.token(syntax.EOF, start)
+	}
+	// A bracket expression embedded in a re-lexed double-quoted string must never consume the host string's closing quote as an argument string.
+	if l.position+1 == l.reLexEnd && l.source[l.position] == '"' {
+		l.position++
+		l.mode = lexNormal
+		return l.token(syntax.StringQuote, start)
+	}
+	switch l.source[l.position] {
+	case ' ', '\t':
+		l.scanWhitespace()
+		return l.token(syntax.Whitespace, start)
+	case '\n', '\r':
+		l.scanNewline()
+		return l.token(syntax.Newline, start)
+	case '#':
+		if l.reLexEnd > l.position {
+			l.scanBracketAtom()
+			return l.classifyBracketAtom(start)
+		}
+		l.scanComment()
+		return l.token(syntax.Comment, start)
+	case '{':
+		l.position++
+		return l.token(syntax.LCurly, start)
+	case '}':
+		l.position++
+		return l.token(syntax.RCurly, start)
+	case '[':
+		l.position++
+		return l.token(syntax.LBracket, start)
+	case ']':
+		l.position++
+		l.mode = lexNormal
+		return l.token(syntax.RBracket, start)
+	case '(':
+		l.position++
+		return l.token(syntax.LParen, start)
+	case ')':
+		l.position++
+		return l.token(syntax.RParen, start)
+	case ',':
+		l.position++
+		return l.token(syntax.Comma, start)
+	case '.':
+		l.position++
+		return l.token(syntax.Dot, start)
+	case '?':
+		l.position++
+		if l.eat('=') {
+			return l.token(syntax.QuestionEquals, start)
+		}
+		return l.token(syntax.Question, start)
+	case '!':
+		l.position++
+		if l.eat('=') {
+			return l.token(syntax.BangEquals, start)
+		}
+		return l.token(syntax.Bang, start)
+	case '=':
+		l.position++
+		if l.eat('=') {
+			return l.token(syntax.EqualsEquals, start)
+		}
+		return l.token(syntax.Equals, start)
+	case '<':
+		l.position++
+		if l.eat('=') {
+			return l.token(syntax.LessEquals, start)
+		}
+		return l.token(syntax.Less, start)
+	case '>':
+		l.position++
+		if l.eat('=') {
+			return l.token(syntax.GreaterEquals, start)
+		}
+		return l.token(syntax.Greater, start)
+	case ';':
+		l.position++
+		return l.token(syntax.Semicolon, start)
+	case '|':
+		l.position++
+		return l.token(syntax.Pipe, start)
+	case '$':
+		return l.startParameter(start, lexBracketExpression)
+	case '@':
+		l.position++
+		return l.token(syntax.At, start)
+	case '"', '\'':
+		kind := l.scanBracketString(l.source[l.position])
+		return l.token(kind, start)
+	default:
+		if l.scanBracketNumber() {
+			return l.token(syntax.Number, start)
+		}
+		l.scanBracketAtom()
+		return l.classifyBracketAtom(start)
+	}
+}
+
 func (l *Lexer) nextParameterName() Token {
 	start := l.position
 	if l.atParameterContextEnd() {
@@ -401,6 +547,10 @@ func (l *Lexer) nextInterpolatedString() Token {
 	if l.source[l.position] == '$' && l.isPlausibleParameterStart(l.reLexEnd-1) {
 		return l.startParameter(start, lexInterpolatedString)
 	}
+	if l.source[l.position] == '[' {
+		l.position++
+		return l.token(syntax.LBracket, start)
+	}
 	contentEnd := l.reLexEnd - 1
 	for l.position < contentEnd {
 		if l.source[l.position] == '\\' && l.position+1 < contentEnd {
@@ -408,6 +558,9 @@ func (l *Lexer) nextInterpolatedString() Token {
 			continue
 		}
 		if l.source[l.position] == '$' && l.isPlausibleParameterStart(contentEnd) {
+			break
+		}
+		if l.source[l.position] == '[' {
 			break
 		}
 		l.position++
@@ -455,6 +608,7 @@ func (l *Lexer) atParameterContextEnd() bool {
 		return l.position >= l.reLexEnd-1
 	case lexNormal,
 		lexInlineMath,
+		lexBracketExpression,
 		lexParameterName,
 		lexParameterArgument,
 		lexParameterArgumentEnd,
@@ -504,6 +658,14 @@ func (l *Lexer) classifyInlineMathAtom(start text.TextSize) Token {
 		kind = syntax.Number
 	}
 	return l.token(kind, start)
+}
+
+func (l *Lexer) classifyBracketAtom(start text.TextSize) Token {
+	value := l.source[start:l.position]
+	if value == "yes" || value == "no" {
+		return l.token(syntax.Boolean, start)
+	}
+	return l.token(syntax.Identifier, start)
 }
 
 // scanInlineMathStart consumes either @[ or the escaped opener @\[.
@@ -572,16 +734,28 @@ func (l *Lexer) scanComment() {
 
 // scanString consumes a quoted string and returns ErrorToken if it is unterminated.
 func (l *Lexer) scanString(quoteType byte) syntax.SyntaxKind {
+	return l.scanStringUntil(quoteType, l.sourceSize)
+}
+
+func (l *Lexer) scanBracketString(quoteType byte) syntax.SyntaxKind {
+	end := l.sourceSize
+	if l.reLexEnd > l.position {
+		end = l.reLexEnd - 1
+	}
+	return l.scanStringUntil(quoteType, end)
+}
+
+func (l *Lexer) scanStringUntil(quoteType byte, end text.TextSize) syntax.SyntaxKind {
 	kind := syntax.String
 	if quoteType == '\'' {
 		kind = syntax.SingleQuotedString
 	}
 	l.position++
-	for l.position < l.sourceSize {
+	for l.position < end {
 		switch l.source[l.position] {
 		case '\\':
 			l.position++
-			if l.position < l.sourceSize {
+			if l.position < end {
 				l.position++
 			}
 		default:
@@ -617,6 +791,65 @@ func (l *Lexer) scanInlineMathAtom() {
 		default:
 			l.position++
 		}
+	}
+}
+
+func (l *Lexer) scanBracketAtom() {
+	for l.position < l.sourceSize {
+		if l.position+1 == l.reLexEnd && l.source[l.position] == '"' {
+			return
+		}
+		switch l.source[l.position] {
+		case ' ', '\t', '\n', '\r',
+			'{', '}', '[', ']', '(', ')',
+			'=', '<', '>', '?', '!', ';', ',', '.', '"', '\'', '@', '$', '|':
+			return
+		default:
+			l.position++
+		}
+	}
+}
+
+// scanBracketNumber consumes a decimal number only when the entire candidate ends at a bracket-expression boundary. This keeps dotted member names split without breaking decimal arguments.
+func (l *Lexer) scanBracketNumber() bool {
+	start := l.position
+	if l.position < l.sourceSize && (l.source[l.position] == '+' || l.source[l.position] == '-') {
+		l.position++
+	}
+	digitStart := l.position
+	for l.position < l.sourceSize && l.source[l.position] >= '0' && l.source[l.position] <= '9' {
+		l.position++
+	}
+	if l.position == digitStart {
+		l.position = start
+		return false
+	}
+	if l.position < l.sourceSize && l.source[l.position] == '.' {
+		dot := l.position
+		l.position++
+		fractionStart := l.position
+		for l.position < l.sourceSize && l.source[l.position] >= '0' && l.source[l.position] <= '9' {
+			l.position++
+		}
+		if l.position == fractionStart {
+			l.position = dot
+		}
+	}
+	if l.position < l.sourceSize && !isBracketAtomBoundary(l.source[l.position]) {
+		l.position = start
+		return false
+	}
+	return true
+}
+
+func isBracketAtomBoundary(char byte) bool {
+	switch char {
+	case ' ', '\t', '\n', '\r',
+		'{', '}', '[', ']', '(', ')',
+		'=', '<', '>', '?', '!', ';', ',', '.', '"', '\'', '@', '$', '|':
+		return true
+	default:
+		return false
 	}
 }
 

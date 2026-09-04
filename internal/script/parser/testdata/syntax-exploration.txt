@@ -356,11 +356,11 @@ macro = {
 
 
 # ============================================================================
-# Bracket / parenthesis groups
+# Ordinary bracket expressions
 #
-# These remain opaque for now. They are included so the current parser can
-# prove losslessness and nested delimiter handling without implementing the
-# later expression grammar.
+# These use a dedicated contextual lexer and grammar. Calls, arguments,
+# member access, grouping, prefixes, format suffixes, and single-quoted
+# strings retain source-derived structure.
 # ============================================================================
 
 [MakeLineIf( IsZero(State.GetTradeCapacity), 'NO_WORLD_MARKET_ACCESS_DUE_TO_NO_TRADE_CAPACITY')]
@@ -369,6 +369,66 @@ macro = {
 
 # Nested calls / parentheses.
 [Outer(Inner(One), Another(Two, Three))]
+
+# Empty and trailing argument lists, grouping, scalar arguments, safe member
+# access, callback prefixes, parameters, variables, and a format suffix.
+[Empty()]
+[Trailing(One, Two,)]
+[Root?.GetValue((3.14), yes, no, 'KEY')|0]
+[Root.!callback]
+[!IsZero($VALUE$)]
+[Resolve(@example)]
+
+types wargoal_types
+{
+ type add_wargoal_panel = default_block_window  {
+  name = "add_wargoal_panel"
+  datacontext = "[AddWarGoalPanel.AccessDiplomaticPlay]"
+
+  blockoverride "window_header_name" {
+   text = "ADD_WARGOAL_HEADER"
+  }
+
+  blockoverride "entire_back_button" {
+   back_button_large = {
+    position = { 8 30 }
+    onclick = "[AddWarGoalPanel.ClearSelectedWarGoalType]"
+    input_action = "back"
+    visible = "[AddWarGoalPanel.HasSelectedWarGoalType]"
+   }
+
+   back_button_large = {
+    position = { 8 30 }
+    onclick = "[InformationPanelBar.OpenPreviousPanel]"
+    input_action = "back"
+    visible = "[Not(AddWarGoalPanel.HasSelectedWarGoalType)]"
+   }
+  }
+ }
+}
+
+# GUI expressions usually occur inside double-quoted script strings. String
+# fragments and parameter substitutions remain siblings of bracket nodes.
+visible_expression = "[IsZero(State.GetTradeCapacity)]"
+formatted_expression = "#v [Treaty.GetCost(Country.Self)|0]#!"
+mixed_expression_string = "before $KEY$ [Root.GetValue] after"
+
+# Escaped bracket-looking text stays an ordinary string.
+escaped_bracket_text = "literal \[bracket]"
+
+# BROKEN: malformed calls and missing delimiters recover within their owning
+# bracket/string region and cannot consume the following sentinel.
+malformed_bracket_1 = "[BrokenCall(One, Two]"
+bracket_recovery_1 = yes
+
+malformed_bracket_2 = [Root.]
+bracket_recovery_2 = yes
+
+malformed_bracket_3 = [Call(One Two)]
+bracket_recovery_3 = yes
+
+malformed_bracket_4 = "[MissingClose"
+bracket_recovery_4 = yes
 
 
 # ============================================================================
@@ -549,7 +609,7 @@ final_statement = yes
 # BROKEN: mismatched / missing closing delimiters.
 [BrokenCall( Inner(foo), bar
 
-# BROKEN: stray closing parenthesis inside opaque group.
+# BROKEN: stray closing parenthesis inside a bracket expression.
 ][BrokenParen(foo))]
 
 # BROKEN: missing closing bracket.

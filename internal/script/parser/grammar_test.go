@@ -129,7 +129,7 @@ func TestGrammarParsesSimpleStatements(t *testing.T) {
 		{name: "binary", source: "foo = bar", kind: syntax.BinaryStatement},
 		{name: "comparison", source: "age >= 16", kind: syntax.BinaryStatement},
 		{name: "anonymous block", source: "{}", kind: syntax.ValueStatement},
-		{name: "opaque bracket", source: "[Foo(Bar)]", kind: syntax.ValueStatement},
+		{name: "bracket expression", source: "[Foo(Bar)]", kind: syntax.ValueStatement},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -373,13 +373,192 @@ func TestGrammarGenericRecoveryUsesLineBreakBoundary(t *testing.T) {
 	}
 }
 
-func TestGrammarOpaqueGroupsRemainStructured(t *testing.T) {
+func TestGrammarParsesBracketCallsAndMembers(t *testing.T) {
 	root := parseGrammarTree(t, `[MakeLineIf(IsZero(State.GetTradeCapacity), 'KEY')]`)
-	if len(grammarNodesOfKind(root, syntax.BracketGroup)) != 1 {
-		t.Fatal("expected one bracket group")
+	if got := len(grammarNodesOfKind(root, syntax.BracketExpression)); got != 1 {
+		t.Fatalf("bracket expression count = %d, want 1", got)
 	}
-	if len(grammarNodesOfKind(root, syntax.ParenGroup)) != 2 {
-		t.Fatal("expected two parenthesis groups")
+	if got := len(grammarNodesOfKind(root, syntax.CallExpression)); got != 2 {
+		t.Fatalf("call expression count = %d, want 2", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.ArgumentList)); got != 2 {
+		t.Fatalf("argument list count = %d, want 2", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.MemberExpression)); got != 1 {
+		t.Fatalf("member expression count = %d, want 1", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.StringExpression)); got != 1 {
+		t.Fatalf("string expression count = %d, want 1", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+		t.Fatalf("bogus expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarParsesBracketExpressionVariants(t *testing.T) {
+	const source = `[Root?.GetValue(3.14, yes, 'KEY',)|0]
+[Root.!callback]
+[!IsZero((Count))]
+[$FUNCTION$(@value)]`
+	root := parseGrammarTree(t, source)
+	wantCounts := map[syntax.SyntaxKind]int{
+		syntax.BracketExpression:       4,
+		syntax.CallExpression:          3,
+		syntax.ArgumentList:            3,
+		syntax.MemberExpression:        2,
+		syntax.FormatSpecifier:         1,
+		syntax.NumberExpression:        2,
+		syntax.BooleanExpression:       1,
+		syntax.StringExpression:        1,
+		syntax.ParenthesizedExpression: 1,
+		syntax.ParameterExpression:     1,
+		syntax.VariableReference:       1,
+	}
+	for kind, want := range wantCounts {
+		if got := len(grammarNodesOfKind(root, kind)); got != want {
+			t.Errorf("%s count = %d, want %d", kind, got, want)
+		}
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+		t.Fatalf("bogus expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarParsesMultilineBracketExpressionWithComment(t *testing.T) {
+	const source = `[Outer(
+    One, # keep the comment as trivia
+    Inner(Two)
+)]`
+	root := parseGrammarTree(t, source)
+	if got := len(grammarNodesOfKind(root, syntax.CallExpression)); got != 2 {
+		t.Fatalf("call expression count = %d, want 2", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+		t.Fatalf("bogus expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarPreservesEmptyBracketExpressionWithoutSyntheticBogus(t *testing.T) {
+	root := parseGrammarTree(t, `value = []`)
+	if got := len(grammarNodesOfKind(root, syntax.BracketExpression)); got != 1 {
+		t.Fatalf("bracket expression count = %d, want 1", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+		t.Fatalf("bogus expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarParsesBracketExpressionsInsideStrings(t *testing.T) {
+	const source = `visible = "[IsZero(State.GetTradeCapacity)]"
+raw_text = "#v [Treaty.GetCost(Country.Self)|0]#!"
+mixed = "before $KEY$ [Root.GetValue] after"`
+	root := parseGrammarTree(t, source)
+	if got := len(grammarNodesOfKind(root, syntax.InterpolatedString)); got != 3 {
+		t.Fatalf("interpolated string count = %d, want 3", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BracketExpression)); got != 3 {
+		t.Fatalf("bracket expression count = %d, want 3", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.ParameterExpression)); got != 1 {
+		t.Fatalf("parameter expression count = %d, want 1", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.FormatSpecifier)); got != 1 {
+		t.Fatalf("format specifier count = %d, want 1", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+		t.Fatalf("bogus expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarKeepsEscapedBracketTextOpaque(t *testing.T) {
+	root := parseGrammarTree(t, `text = "literal \[bracket]"`)
+	if got := len(grammarNodesOfKind(root, syntax.InterpolatedString)); got != 0 {
+		t.Fatalf("interpolated string count = %d, want 0", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BracketExpression)); got != 0 {
+		t.Fatalf("bracket expression count = %d, want 0", got)
+	}
+}
+
+func TestGrammarRecoversMalformedBracketExpressions(t *testing.T) {
+	const source = `first = "[BrokenCall(One, Two]"
+second = [Root.]
+third = [Call(One Two)]
+fourth = "[MissingClose"
+final = yes`
+	root := parseGrammarTree(t, source)
+	if got := len(grammarNodesOfKind(root, syntax.BracketExpression)); got != 4 {
+		t.Fatalf("bracket expression count = %d, want 4", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 1 {
+		t.Fatalf("bogus expression count = %d, want 1", got)
+	}
+	binaryStatements := grammarNodesOfKind(root, syntax.BinaryStatement)
+	foundFinal := false
+	for _, statement := range binaryStatements {
+		texts := grammarTokenTexts(statement)
+		if len(texts) > 0 && texts[0] == "final" {
+			foundFinal = true
+		}
+	}
+	if !foundFinal {
+		t.Fatal("final recovery sentinel is not a binary statement")
+	}
+}
+
+func TestGrammarMissingCallCloseDoesNotCreateSyntheticBogus(t *testing.T) {
+	tests := []string{
+		`value = "[BrokenCall(One, Two]"`,
+		`[BrokenCall(Inner(foo), bar]`,
+	}
+	for _, source := range tests {
+		root := parseGrammarTree(t, source)
+		if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got != 0 {
+			t.Errorf("source %q: bogus expression count = %d, want 0", source, got)
+		}
+		argumentLists := grammarNodesOfKind(root, syntax.ArgumentList)
+		if len(argumentLists) == 0 {
+			t.Fatalf("source %q: expected an argument list", source)
+		}
+		outer := argumentLists[0]
+		for _, kind := range directGrammarTokenKinds(outer) {
+			if kind == syntax.RParen {
+				t.Errorf("source %q: missing RParen unexpectedly present", source)
+			}
+		}
+	}
+}
+
+func TestGrammarMissingCommaRecoversInsideArgumentList(t *testing.T) {
+	root := parseGrammarTree(t, `[Call(One Two)]`)
+	argumentLists := grammarNodesOfKind(root, syntax.ArgumentList)
+	if len(argumentLists) != 1 {
+		t.Fatalf("argument list count = %d, want 1", len(argumentLists))
+	}
+	arguments := argumentLists[0]
+	if got, want := directGrammarNodeKinds(arguments), []syntax.SyntaxKind{syntax.NameExpression, syntax.BogusExpression}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("argument nodes:\n got: %v\nwant: %v", got, want)
+	}
+	if got, want := directGrammarTokenKinds(arguments), []syntax.SyntaxKind{syntax.LParen, syntax.RParen}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("argument tokens:\n got: %v\nwant: %v", got, want)
+	}
+	bogus := grammarNodesOfKind(arguments, syntax.BogusExpression)
+	if len(bogus) != 1 {
+		t.Fatalf("bogus expression count = %d, want 1", len(bogus))
+	}
+	if got, want := grammarTokenTexts(bogus[0]), []string{"Two"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("bogus tokens:\n got: %v\nwant: %v", got, want)
+	}
+}
+
+func TestGrammarBoundsSingleQuotedArgumentByHostString(t *testing.T) {
+	const source = `17"XZy[8C'0000000000000"`
+	root := parseGrammarTree(t, source)
+	if got := len(grammarNodesOfKind(root, syntax.BracketExpression)); got != 1 {
+		t.Fatalf("bracket expression count = %d, want 1", got)
+	}
+	if got := len(grammarNodesOfKind(root, syntax.BogusExpression)); got == 0 {
+		t.Fatal("expected malformed single-quoted argument to be bogus")
 	}
 }
 
@@ -664,8 +843,8 @@ func TestGrammarConditionalBlockRequiresAdjacentOpeners(t *testing.T) {
 	if got := len(grammarNodesOfKind(ordinary, syntax.ConditionalBlock)); got != 0 {
 		t.Fatalf("spaced conditional count = %d, want 0", got)
 	}
-	if got := len(grammarNodesOfKind(ordinary, syntax.BracketGroup)); got != 2 {
-		t.Fatalf("ordinary bracket group count = %d, want 2", got)
+	if got := len(grammarNodesOfKind(ordinary, syntax.BracketExpression)); got != 2 {
+		t.Fatalf("ordinary bracket expression count = %d, want 2", got)
 	}
 }
 
@@ -808,6 +987,10 @@ func TestGrammarExplorationCorpusRecoversLaterStatements(t *testing.T) {
 	}
 	root := parseGrammarTree(t, string(source))
 	wantKeys := []string{
+		"bracket_recovery_1",
+		"bracket_recovery_2",
+		"bracket_recovery_3",
+		"bracket_recovery_4",
 		"parameter_recovery_1",
 		"parameter_recovery_2",
 		"parameter_recovery_3",

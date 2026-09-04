@@ -99,7 +99,21 @@ func isInterpolatedString(parser *Parser) bool {
 		return false
 	}
 	value := parser.CurrentText()
-	return hasParameterStart(value, 1, len(value)-1, true)
+	return hasParameterStart(value, 1, len(value)-1, true) ||
+		hasUnescapedBracketStart(value, 1, len(value)-1)
+}
+
+func hasUnescapedBracketStart(value string, start, end int) bool {
+	for offset := start; offset < end; offset++ {
+		if value[offset] == '\\' && offset+1 < end {
+			offset++
+			continue
+		}
+		if value[offset] == '[' {
+			return true
+		}
+	}
+	return false
 }
 
 func hasParameterStart(value string, start, end int, honorEscapes bool) bool {
@@ -186,20 +200,24 @@ func parseInterpolatedString(parser *Parser) CompletedMarker {
 	}
 	interpolated := parser.Start()
 	parser.ReLex(lexer.ReLexInterpolatedString)
-	if !parser.Eat(syntax.StringQuote) {
+	if !parser.EatWithContext(syntax.StringQuote, lexer.LexInterpolatedString) {
 		panic("grammar(script): expected interpolated string opener")
 	}
 	for !parser.At(syntax.StringQuote) && !parser.At(syntax.EOF) {
 		switch {
 		case parser.At(syntax.StringFragment):
-			parser.Bump()
+			parser.BumpWithContext(lexer.LexInterpolatedString)
 		case parser.At(syntax.Dollar):
 			parseParameterExpression(parser)
+		case parser.At(syntax.LBracket):
+			parseBracketExpression(parser, lexer.LexInterpolatedString)
 		default:
-			panic("grammar(script): unexpected token in interpolated string")
+			bogus := parser.Start()
+			parser.BumpWithContext(lexer.LexInterpolatedString)
+			bogus.Complete(parser, syntax.BogusExpression)
 		}
 	}
-	if !parser.Eat(syntax.StringQuote) {
+	if !parser.EatWithContext(syntax.StringQuote, lexer.LexNormal) {
 		panic("grammar(script): expected interpolated string closer")
 	}
 	return interpolated.Complete(parser, syntax.InterpolatedString)

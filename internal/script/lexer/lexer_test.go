@@ -400,6 +400,96 @@ func TestReLexInlineMath(t *testing.T) {
 	}
 }
 
+func TestNextWithBracketExpressionContext(t *testing.T) {
+	const source = `[Root?.GetValue(3.14, yes, 'KEY', $DEFAULT$)|0] next.value`
+	l := NewLexer(source)
+	got := []Token{l.Next()}
+	current := l.NextWithContext(LexBracketExpression)
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		if current.Kind == syntax.RBracket {
+			current = l.NextWithContext(LexNormal)
+		} else {
+			current = l.Next()
+		}
+	}
+	want := []expectedToken{
+		{syntax.LBracket, "["},
+		{syntax.Identifier, "Root"},
+		{syntax.Question, "?"},
+		{syntax.Dot, "."},
+		{syntax.Identifier, "GetValue"},
+		{syntax.LParen, "("},
+		{syntax.Number, "3.14"},
+		{syntax.Comma, ","},
+		{syntax.Whitespace, " "},
+		{syntax.Boolean, "yes"},
+		{syntax.Comma, ","},
+		{syntax.Whitespace, " "},
+		{syntax.SingleQuotedString, "'KEY'"},
+		{syntax.Comma, ","},
+		{syntax.Whitespace, " "},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "DEFAULT"},
+		{syntax.Dollar, "$"},
+		{syntax.RParen, ")"},
+		{syntax.Pipe, "|"},
+		{syntax.Number, "0"},
+		{syntax.RBracket, "]"},
+		{syntax.Whitespace, " "},
+		{syntax.Identifier, "next.value"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
+func TestBracketContextInsideInterpolatedString(t *testing.T) {
+	const source = `"before [Root.Get($VALUE$)|0] after" next`
+	l := NewLexer(source)
+	current := l.Next()
+	current = l.ReLex(current, ReLexInterpolatedString)
+	var got []Token
+	for {
+		got = append(got, current)
+		if current.Kind == syntax.EOF {
+			break
+		}
+		switch current.Kind { //nolint:exhaustive // Only delimiters change the next-token context in this test driver.
+		case syntax.LBracket:
+			current = l.NextWithContext(LexBracketExpression)
+		case syntax.RBracket:
+			current = l.NextWithContext(LexInterpolatedString)
+		default:
+			current = l.Next()
+		}
+	}
+	want := []expectedToken{
+		{syntax.StringQuote, `"`},
+		{syntax.StringFragment, "before "},
+		{syntax.LBracket, "["},
+		{syntax.Identifier, "Root"},
+		{syntax.Dot, "."},
+		{syntax.Identifier, "Get"},
+		{syntax.LParen, "("},
+		{syntax.Dollar, "$"},
+		{syntax.ParameterName, "VALUE"},
+		{syntax.Dollar, "$"},
+		{syntax.RParen, ")"},
+		{syntax.Pipe, "|"},
+		{syntax.Number, "0"},
+		{syntax.RBracket, "]"},
+		{syntax.StringFragment, " after"},
+		{syntax.StringQuote, `"`},
+		{syntax.Whitespace, " "},
+		{syntax.Identifier, "next"},
+		{syntax.EOF, ""},
+	}
+	assertTokenSequence(t, source, got, want)
+}
+
 func TestReLexParameterAndRestoreNormalMode(t *testing.T) {
 	const source = `$VALUE|100$ next-value = yes`
 	l := NewLexer(source)
